@@ -11,6 +11,19 @@ plane.
 Documentation on how a mapping file must look like can be found in `./doc/skeleton.map`.
 The datamodel metadata part of a mapping file can be generated using `./generator/generator.sh`.
 
+## Dependencies
+
+`Transformer` requires the following dependencies to work:
+
+- [Lua](http://www.lua.org)
+- [LuaFileSystem](https://github.com/keplerproject/luafilesystem)
+- [Lua BitOp](http://bitop.luajit.org/)
+- [SQLite3 and LuaSQLite3](http://lua.sqlite.org/index.cgi/index)
+- [lua-tch](https://github.com/dirkfeytons/lua-tch)
+- [UCI](https://git.lede-project.org/?p=project/uci.git)
+- [ubus](https://git.lede-project.org/?p=project/ubus.git) (not required for
+  starting up; only if mappings use the ubus eventsource)
+
 ## License
 
 `Transformer` mainly uses the 2-clause ClearBSD license. There are some
