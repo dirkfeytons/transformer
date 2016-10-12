@@ -1,0 +1,331 @@
+-- This file describes the basic lay-out of a mapping file.
+-- It documents the functionality which needs to be provided.
+
+local objectmapping = {
+  objectType = {
+    -- The type description which is automatically generated.  Based on the
+    -- xml generator
+  },
+
+  -- The name of the parameter of which the value will be used to construct
+  -- the default value of the Alias parameter.
+  -- This is optional. If absent the key will be used to construct the default
+  -- value of the Alias parameter.
+  -- This is ignored if there is no Alias parameter, identified by the
+  -- aliasParameter entry in objectType.
+  aliasDefault = "some parameter name",
+
+  -- The following functions have to be filled in by the developer or by a
+  -- mapping helper library called a mapper. You can lookup a mapper using
+  -- the mapper("<mappername>") function.
+  -- Each mapper has a connect() function that takes the mapping as
+  -- first argument. The next argument(s) are mapper specific; see the
+  -- respective mapper documentation.
+  -- Most of these functions receive the key(s) of the parent object(s).
+  -- If you don't need them or only need one or two then you can specify
+  -- only those in your function. This is indicated below in the function
+  -- signatures with the usual square bracket notation.
+  -- Note that Transformer supports a transaction model: several actions
+  -- (set/add/delete) are grouped in a transaction which can either be committed
+  -- or reverted. If a mapping implements the optional commit and revert functions,
+  -- Transformer will call the appropriate function at the end of a transaction.
+  -- Though strongly recommended, this model is not mandatory and it's up to
+  -- the implementer of a mapping to decide if he/she wants to use the
+  -- transaction model or not.
+
+  --- Retrieve a parameter value. [MANDATORY]
+  -- This function will be called whenever Transformer needs the value of
+  -- a certain parameter belonging to a certain instance of an object type.
+  -- The value of the 'get' field in a mapping can be two things:
+  -- * A function that can return the value of all (readable) parameters.
+  -- * A table with for each (readable) parameter one of the following things:
+  --   * A function that can return the value of that specific parameter.
+  --   * A string with the fixed value of that specific parameter.
+  --   Tip: if you have a parameter whose value is not fixed at build time
+  --        but is fixed at run time you can start with a function that
+  --        retrieves the value and then overwrites itself with the retrieved
+  --        value. From then on Transformer can directly return this value,
+  --        as if you wrote a fixed value in the mapping. The retrieval
+  --        function will be garbage collected.
+  --        The above is a 'lazy' implementation. You can also retrieve all
+  --        values when the mapping is loaded and insert this value in the
+  --        mapping. However, this delays the startup of Transformer.
+  -- If it's a function then it will be called with the following parameters:
+  -- * A reference to the mapping structure itself.
+  -- * The name of the parameter to retrieve the value of.
+  -- * The key of the particular object instance from which you want to
+  --   retrieve the parameter value (if the object type is multi instance).
+  -- * The key of the parent object of the object from which you want to
+  --   retrieve the parameter value (if applicable).
+  -- * The key of the grandparent object of the object from ...
+  -- * ...
+  -- The function must return either the value (as a string) or nil plus
+  -- an error message.
+  -- There is no need to add the Alias parameter in the get. It will be ignored
+  -- if present. An internal implementation will be used.
+  get = function(mapping, paramname [, key [, parentkey [, ...]]])
+
+  end,
+  -- or alternatively:
+  get = {
+    Foo = function(mapping, paramname [, key [, parentkey [, ...]]])
+
+    end,
+    Bar = "barvalue"  -- fixed value
+  },
+
+  --- Retrieve a set of parameters at once. [OPTIONAL]
+  -- This function, if present, will be called as an optimization when
+  -- iterating over all parameters of an instance. It will be called once
+  -- for each instance.
+  -- It must return a table with the  parameter names as keys and their
+  -- (string) value as the value.
+  -- It is acceptable to leave out some parameters. For the ones missing,
+  -- the normal get will always be used.
+  --
+  -- The normal use case for this function is the case were a single call
+  -- to retrieve the underlying data returns the value for multiple parameters
+  -- at once. In this case it would be a waste of resources to make that call
+  -- for each parameter individually.
+  -- Note that the get is still mandatory in that case as that will be called
+  -- when retrieving a single parameter.
+  --
+  -- This function will be called with the following parameters:
+  -- * A reference to the mapping structure itself
+  -- * the key of the current instance, its parent, grandparent, etc.
+  --   (same as in get)
+  -- It must return a table { <paramName> = <string value>, ... }
+  -- As with the get, there is no need to add the value Alias parameter and
+  -- will be ignored if present as the internal implementation will be used.
+  getall = function(mapping, [,key [,parentKey [, ...]]])
+  end,
+
+  --- Change a parameter value. [MANDATORY]
+  -- This function will be called whenever Transformer needs to update
+  -- the value of a certain parameter belonging to a certain instance
+  -- of an object type.
+  -- The value of the 'set' field in a mapping can be two things:
+  -- * A function that can set the value of all (writable) parameters.
+  -- * A table with for each (writable) parameter a function that can set
+  --   the value of that specific parameter.
+  -- The function will be called with the following parameters:
+  -- * A reference to the mapping structure itself.
+  -- * The name of the parameter to set the value of.
+  -- * The new value of the parameter (as a string).
+  -- * The key of the particular object instance from which you want to
+  --   set the parameter value (if the object type is multi instance).
+  -- * The key of the parent object of the object from which you want to
+  --   set the parameter value (if applicable).
+  -- * The key of the grandparent object of the object from ...
+  -- * ...
+  -- The function must return nil plus an error message when the set failed.
+  -- If everything went OK then it can return true or simply nothing at all.
+  -- It's important to not throw an error if your function decides the value
+  -- is not correct. If a mapping function throws an error then that bubbles
+  -- up through Transformer as an Internal Error which is not correct.
+  -- It's also important to (if possible) not actually commit changes yet.
+  -- Instead do that in the commit() function (or revert when the revert()
+  -- function is called). Otherwise Transformer can not guarantee the proper
+  -- transactional behavior for the TR-069 SetParameterValues RPC.
+  -- Any entry for the Alias parameter will be ignored as the internal
+  -- implementation will be used.
+  set = function(mapping, paramname, paramvalue [, key [, parentkey [, ...]]])
+
+  end,
+  -- or alternatively:
+  set = {
+    Foo = function(mapping, paramname, paramvalue [, key [, parentkey [, ...]]])
+
+    end,
+    Bar = function(mapping, paramname, paramvalue [, key [, parentkey [, ...]]])
+
+    end
+  },
+
+  --- Add a new object instance. [MANDATORY FOR MULTI-INSTANCE]
+  -- This function will be called whenever Transformer needs to create
+  -- a new object instance of a multi instance object type.
+  -- The value of the 'add' field in a mapping must be a function. It
+  -- will be called with the following parameters:
+  -- * A reference to the mapping structure itself.
+  -- * If the mapping handles a pass-through type path, the second argument
+  --   will be present and MAY contain a name that should be used as display
+  --   name (it can also be nil). If the mapping handles another sort of type
+  --   path, this parameter will not be present.
+  -- * The key of the parent object under which you want to
+  --   create a new instance of this object type (if applicable).
+  -- * The key of the grandparent object under which ...
+  -- * ...
+  -- The function must return the key of the new instance or nil
+  -- plus an error message.
+  add = function(mapping [,name [, parentkey [, ...]]])
+
+  end,
+
+  --- Delete an object instance. [MANDATORY FOR MULTI-INSTANCE]
+  -- This function will be called whenever Transformer needs to remove
+  -- a specific object instance of a multi instance object type.
+  -- The value of the 'delete' field in a mapping must be a function. It
+  -- will be called with the following parameters:
+  -- * A reference to the mapping structure itself.
+  -- * The key of the object to delete.
+  -- * The key of the parent object under which the object is being deleted
+  --   (if applicable).
+  -- * The key of the grandparent object under which ...
+  -- * ...
+  -- The function must return either true or nil plus an error message.
+  delete = function(mapping, key [, parentkey [, ...]])
+
+  end,
+
+  --- Delete all object instances under a particular parent. [OPTIONAL]
+  -- This function will be called (when present) whenever Transformer needs
+  -- to remove all object instances of a multi instance object type
+  -- under a particular parent object.
+  -- The value of the 'deleteall' field in a mapping must be a function. It
+  -- will be called with the following parameters:
+  -- * A reference to the mapping structure itself.
+  -- * The key of the parent object under which the objects are being deleted
+  --   (if applicable).
+  -- * The key of the grandparent object under which ...
+  -- * ...
+  -- The function must return either true or nil plus an error message.
+  deleteall = function(mapping [, parentkey [, ...]])
+
+  end,
+
+  --- Retrieve a list of the keys of all current object instances. [MANDATORY FOR MULTI-INSTANCE
+  -- AND OPTIONAL SINGLE INSTANCE]
+  -- This function will be called whenever Transformer needs an up-to-date
+  -- view on the existing instances. Currently this happens every time
+  -- before Transformer does a get/set/add/delete to make sure objects
+  -- still exist.
+  -- The value of the 'entries' field in a mapping must be a function. It
+  -- will be called with the following parameters:
+  -- * A reference to the mapping structure itself.
+  -- * The key of the parent object under which the list of keys is
+  --   being requested (if applicable).
+  -- * the key of the grand parent object under which ...
+  -- * ...
+  -- The function must return an array of keys or nil plus an error message.
+  -- Optionally an array of { <display name>, <real key> } values can be returned.
+  -- The first value in such an array is the display name. This name is used to
+  -- address instances in the datamodel. The second value is the real key. This
+  -- is the actual key that is passed back to the mapping. The use case is to make
+  -- it easier for Transformer clients to address name-based instances while a
+  -- mapping can still construct keys that adhere to the Transformer requirements.
+  -- Some requirements of keys:
+  -- * Keys are only relevant for multi instance object types (maxEntries > 1).
+  -- * Keys must be strings.
+  -- * Keys must remain the same during the lifetime of an object.
+  -- * Keys must uniquely identify an object across all instances of the same type,
+  --   independent of the parent object.
+  -- * A certain key value must never be used again: identical keys within the same
+  --   object type must not be possible, even over long periods of time.
+  -- * Keep keys as short as possible. Keys are saved by Transformer and a single
+  --   key value can be stored multiple times (e.g. as part of indexes, as parent key
+  --   in a child's key, ...). Reducing the amount of data to be saved improves the
+  --   performance because writing to flash is slow.
+  entries = function(mapping [, parentkey [, ...]])
+    return { "somekey1", "somekey2" }
+    -- or alternatively:
+    return { { "displayname1", "somekey1" }, { "displayname2", "somekey2" } }
+  end,
+
+  --- Commit all current changes to all object instances. [OPTIONAL]
+  -- The value of the 'commit' field in a mapping must be a function.
+  -- This function will be called (when present) whenever Transformer ends
+  -- a transaction successfully.
+  -- It will be called with the following parameters:
+  -- * A reference to the mapping structure itself.
+  -- The function must return either true or nil plus an error message.
+  commit = function(mapping)
+
+  end,
+
+  --- Revert all current changes to all object instances. [OPTIONAL]
+  -- The value of the 'revert' field in a mapping must be a function.
+  -- This function will be called (when present) whenever a transaction in
+  -- Transformer failed and its changes need to be rolled back. It will be
+  -- called with the following parameters:
+  -- * A reference to the mapping structure itself.
+  -- The function must return either true or nil plus an error message.
+  revert = function(mapping)
+
+  end,
+
+  --- Initialize event source watchers. [OPTIONAL]
+  -- This is the trigger for a mapping to put in place various watches
+  -- on event sources so Transformer can be informed when the datamodel
+  -- changes. For more details regarding eventing see ./doc/eventing.md
+  -- This function is only called once at some appropriate time
+  -- (not necessarily on startup).
+  -- It will be called with the following parameters:
+  -- * A reference to the mapping structure itself.
+  -- Any return values will be ignored.
+  add_watchers = function(mapping)
+
+  end,
+}
+
+-- Transformer also exposes some globals to mappings:
+
+-- If you're using a mapper then you don't have to define the necessary functions
+-- in the mapping description above. Instead you 'connect' your mapping to
+-- the mapper who will do it for you.
+mapper("simpleuci").connect(objectmapping, <mapper specific information>)
+
+-- After everything is defined the mapping can be registered.
+register(objectmapping)
+
+-- The commit & apply context. See commitapply.md for more info on this.
+commitapply
+
+-- Try to resolve an objecttype path and a key to the corresponding datamodel path.
+-- The returned path is a fully qualified instance path but without a dot at the end.
+-- If resolving fails then nil is returned.
+-- This function first queries the information saved by Transformer in its persistency store.
+-- If not enough information is present in the persistency store to resolve the path,
+-- all mappings on the given typepath are synced (their entries() functions are called)
+-- and the resolve is tried again.
+-- The main use case for this function is mappings that have to deal with parameters
+-- whose values are datamodel paths; so called cross-references.
+resolve(typepath, key)
+
+-- Lookup the key associated with the given object path and optionally validate that
+-- the object is of one of the allowed objecttypes.
+-- Returns the key and object type of the object itself or its first multi instance
+-- ancestor. In case it's single instance all the way to the root then an empty
+-- string is returned as key. If the given object path was nil or empty then empty
+-- strings are returned. If the object is not present in the persistency store,
+-- a sync is triggered (the entries() functions on the typepath are called).
+-- If still no object is found, nil is returned.
+-- Throws an error when the object can never exist or doesn't match any of the
+-- provided objecttype paths.
+-- The main use case for this function is mappings that have to deal with parameters
+-- whose values are datamodel paths; so called cross-references.
+tokey(objectpath [, typepath1 [, ...]])
+
+-- Event sources can be used by mappings to get informed when something happens in
+-- the subsystem monitored by that specific event source. This way the mapping
+-- can inform Transformer of changes so Transformer can, in turn, send events to
+-- clients who subscribe for changes in the datamodel.
+-- This function is mainly used in the add_watchers() function of a mapping but
+-- it can also be called at other times (e.g. be notified when a new object appears
+-- so you can put a watch on it).
+-- For more information see the documentation of the respective event sources.
+eventsource("uci").watch(objectmapping, <event source specific information>)
+
+-- For the specified mapping retrieve all the keys, parent keys, ... up to
+-- the given level. The level only refers to the number of multi-instance mappings, because
+-- only these mappings generate keys.
+-- A level of 1 means only the keys of the mapping's instances (if it's a multi-instance
+-- mapping) or of the first multi-instance mapping above the mapping.
+-- A level of 2 means also include the keys of the next level of multi-instance
+-- mapping, etc. The default level is 1.
+-- Returns an array of arrays with the key, parent key, ... If there are no
+-- keys then an empty array is returned.
+-- Example: { { key1, parentkey1 }, { key2, parentkey2 } }
+-- The main use case for this function is in the callback registered with
+-- an event source.
+query_keys(objectmapping [, level])
