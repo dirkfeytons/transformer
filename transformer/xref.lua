@@ -205,13 +205,14 @@ function M.tokey(store, objectpath, typepath, ...)
   local key
   local rc, keys = pcall(store.getkeys, store, maplist, inumbers, true)
   if rc then
-    -- Everything checked out OK; our key is the last one in the list.
-    key = keys[#keys]
+    -- Everything checked out OK; our key is the first one in the list.
+    -- (keys are returned in reverse order)
+    key = keys[1]
   else
     -- Some instance could not be found; try again but allow to sync.
     rc, keys = pcall(store.getkeys, store, maplist, inumbers)
     if rc then
-      key = keys[#keys]
+      key = keys[1]
     end
   end
   if key then
