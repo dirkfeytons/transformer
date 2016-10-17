@@ -118,19 +118,18 @@ local function check_cursor_config_needs_update(cursor_to_check, config)
   if not cached_config or not cached_config.cursor_health[cursor_to_check] then
     return true
   end
-  local config_paths = cached_config.paths
-  if config_paths.checked then
+  if cached_config.checked then
     -- The config paths have been checked for this config since start was last called
+    -- and the cursor health is good.
     return false
   end
+  local config_paths = cached_config.paths
   for path, path_info in pairs(config_paths) do
-    if path ~= "checked" then
-      if not path_info.verifier(path, path_info.value) then
-        return true
-      end
+    if not path_info.verifier(path, path_info.value) then
+      return true
     end
   end
-  config_paths.checked = true
+  cached_config.checked = true
   return false
 end
 
@@ -159,6 +158,24 @@ local function update_md5(path)
     local cont = fd:read("*a")
     fd:close()
     return crypto.md5(cont or "")  -- Equate content error to empty content (f.e. when path is a directory)
+  end
+end
+
+--- Helper function to invalidate the cursor health for a given config file.
+-- @param doc.ucidoc#cursor cursor_to_skip A cursor we can skip from being invalidated.
+-- @param #string config The config file for which we are invalidating the cursor healths.
+-- @param #boolean invalidate_checked Optional parameter to reset the checked flag for the tracked files.
+local function invalidate_cursor_health(cursor_to_skip, config, invalidate_checked)
+  local cached_config = loaded_configs[config]
+  if cached_config then
+    for curs in pairs(cached_config.cursor_health) do
+      if curs ~= cursor_to_skip then
+        cached_config.cursor_health[curs] = false
+      end
+    end
+    if invalidate_checked then
+      cached_config.checked = false
+    end
   end
 end
 
@@ -193,8 +210,8 @@ local function reload_cursor(cursor_to_reload, config)
           verifier = check_md5,
           updater = update_md5,
         },
-        ["checked"] = false,
       },
+      checked = false,
       cursor_health = { -- false means reload is required, true means healthy
         [cursor] = false,
         [state_cursor] = false,
@@ -203,33 +220,18 @@ local function reload_cursor(cursor_to_reload, config)
     }
     loaded_configs[config] = cached_config
   end
-  cached_config.cursor_health[cursor_to_reload] = true
-  for path, path_info in pairs(cached_config.paths) do
-    if path ~= "checked" then
+  if not cached_config.checked then
+    -- We're about to update the cache info for the first time in a transaction, invalidate
+    -- all other cursor health, since we will no longer know their loaded state.
+    invalidate_cursor_health(cursor_to_reload, config)
+    for path, path_info in pairs(cached_config.paths) do
       path_info.value = path_info.updater(path)
-    else
-      cached_config.paths[path] = true
     end
+    -- The info in the cache is checked in this transaction, mark accordingly.
+    cached_config.checked = true
   end
+  cached_config.cursor_health[cursor_to_reload] = true
   return true
-end
-
---- Helper function to invalidate the cursor health for a given config file.
--- @param doc.ucidoc#cursor cursor_to_skip A cursor we can skip from being invalidated.
--- @param #string config The config file for which we are invalidating the cursor healths.
--- @param #boolean invalidate_checked Optional parameter to reset the checked flag for the tracked files.
-local function invalidate_cursor_health(cursor_to_skip, config, invalidate_checked)
-  local cached_config = loaded_configs[config]
-  if cached_config then
-    for curs in pairs(cached_config.cursor_health) do
-      if curs ~= cursor_to_skip then
-        cached_config.cursor_health[curs] = false
-      end
-    end
-    if invalidate_checked then
-      cached_config.paths.checked = false
-    end
-  end
 end
 
 local function save_cursor(cursor_to_save, config, invalidate_all)
@@ -760,7 +762,7 @@ end
 -- not be checked again until the next time the state is cleared.
 function M.start()
   for config, config_status in pairs(loaded_configs) do
-    config_status.paths.checked = false
+    config_status.checked = false
   end
   cursors_in_foreach = {}
 end
