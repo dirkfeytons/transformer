@@ -133,32 +133,74 @@ local function check_cursor_config_needs_update(cursor_to_check, config)
   return false
 end
 
-local function check_inode(path, previous_ino)
-  return lfs.attributes(path, "ino") == previous_ino
-end
-
-local function update_inode(path)
+--- Retrieve the inode of the given path.
+-- @param #string path The path of the file we need to retrieve the inode from.
+-- @return #number The inode of the given path.
+-- @error nil, #string
+local function retrieve_inode(path)
   return lfs.attributes(path, "ino")
 end
 
-local function check_md5(path, previous_md5)
-  local fd = open(path, "r")
-  local new_md5
-  if fd then
-    local cont = fd:read("*a")
-    fd:close()
-    new_md5 = crypto.md5(cont or "")  -- Equate content error to empty content (f.e. when path is a directory)
-  end
-  return new_md5 == previous_md5
+--- Check if the inode of the given path matches the given inode.
+-- @param #string path The path of the file we need to retrieve the inode from.
+-- @param #number previous_ino The inode to which we need to compare.
+-- @return #boolean True if the inode of the given path is equal to the given inode, false otherwise.
+local function check_inode(path, previous_ino)
+  return retrieve_inode(path) == previous_ino
 end
 
-local function update_md5(path)
+--- Retrieve the md5 checksum of the given path.
+-- @param #string path The path of the file we need to calculate the md5 checksum for.
+-- @return #string The md5 checksum of the given path.
+-- @error nil, #string
+local function retrieve_md5(path)
   local fd = open(path, "r")
   if fd then
     local cont = fd:read("*a")
     fd:close()
     return crypto.md5(cont or "")  -- Equate content error to empty content (f.e. when path is a directory)
   end
+end
+
+--- Check if the md5 checksum of the given path matches the given md5 checksum.
+-- @param #string path The path of the file we need to calculate the md5 checksum for.
+-- @param #number previous_md5 The md5 checksum to which we need to compare.
+-- @return #boolean True if the md5 checksum of the given path is equal to the given md5 checksum, false otherwise.
+local function check_md5(path, previous_md5)
+  return retrieve_md5(path) == previous_md5
+end
+
+--- Retrieve the modification time of the given path.
+-- @param #string path The path of the file for which we need to retrieve the modification time.
+-- @return #number The modification time of the given path.
+-- @error nil, #string
+local function retrieve_modification(path)
+  return lfs.attributes(path, "modification")
+end
+
+--- Check if the modification time of the given path matches the given modification time.
+-- @param #string path The path of the file for which we need to retrieve the modification time.
+-- @param #number previous_mod The modification time to which we need to compare.
+-- @return #boolean True if the modification time of the given path is equal to the given modification time, false otherwise.
+local function check_modification(path, previous_mod)
+  return retrieve_modification(path) == previous_mod
+end
+
+--- Check if the inode and the modification time of the given path matches the given inode and modification time.
+-- @param #string path The path of the file for which we need to retrieve the inode and modification time.
+-- @param #table previous_values An array with the values to which we need to compare. The first entry should contain
+--                               the inode and the second entry should contain the modification time.
+-- @return #boolean True if both the inode and the modification time of the given path are equal to the given values, false otherwise.
+local function check_inode_and_modification(path, previous_values)
+  return check_inode(path, previous_values[1]) and check_modification(path, previous_values[2])
+end
+
+--- Retrieve the inode and the modification time of the given path.
+-- @param #string path The path of the file for which we need to retrieve the inode and the modification time.
+-- @return #table An array with as first entry the inode of the given path and as second entry the modification time of the given path.
+-- @error nil, #string
+local function retrieve_inode_and_modification(path)
+  return {retrieve_inode(path), retrieve_modification(path)}
 end
 
 --- Helper function to invalidate the cursor health for a given config file.
@@ -199,16 +241,16 @@ local function reload_cursor(cursor_to_reload, config)
     cached_config = {
       paths = {
         [conf_dir_path] = {
-          verifier = check_inode,
-          updater = update_inode,
+          verifier = check_inode_and_modification,
+          updater = retrieve_inode_and_modification,
         },
         [uci_save_dir_path] = {
           verifier = check_md5,
-          updater = update_md5,
+          updater = retrieve_md5,
         },
         [state_dir_path] = {
           verifier = check_md5,
-          updater = update_md5,
+          updater = retrieve_md5,
         },
       },
       checked = false,
@@ -518,7 +560,7 @@ function M.set_on_uci(binding, value, commitapply)
     -- performed the save will then fail. Reloading the cursor is a workaround for this bug)
     result = save_cursor(cursor, config, true)
   else
-    logger:error("Set failed: %s", tostring(errmsg))
+    logger:error("Set failed on %s.%s.%s = %s: %s", tostring(config), tostring(section), tostring(option), tostring(value), tostring(errmsg))
   end
   if result and commitapply then
     if option then
