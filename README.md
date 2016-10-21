@@ -3,10 +3,10 @@
 ## Description
 
 `Transformer` is an application that provides a datamodel mapping framework.
-More specifically it allows one to implement a Broadband Forum [TR-106](https://www.broadband-forum.org/cwmp.php)
-based datamodel without having to worry too much about the requirements of TR-106
-and instead focus on the logic to map that datamodel to the system's management
-plane.
+More specifically it allows one to implement a Broadband Forum [TR-106](https://www.broadband-forum.org/standards-and-software/technical-specifications/tr-069-files-tools)
+based datamodel (typically used in TR-069) without having to worry too much about
+the requirements of TR-106 and instead focus on the logic to map that datamodel
+to the system's management plane.
 
 Documentation on how a mapping file must look like can be found in `./doc/skeleton.map`.
 The datamodel metadata part of a mapping file can be generated using `./generator/generator.sh`.
