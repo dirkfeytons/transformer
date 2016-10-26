@@ -35,19 +35,34 @@ local default_hidden_values = {
   password = ""
 }
 
-local function hidden_mapping(mapping)
+local function should_be_unhidden(path, unhide_patterns)
+  if unhide_patterns then
+    for _, unhide in ipairs(unhide_patterns) do
+      if match(path, unhide) then
+        return true
+      end
+    end
+  end
+  return false
+end
+
+local function hidden_mapping(mapping, unhide_patterns)
   local objtype = mapping.objectType
   local result
   for pname, ptype in pairs(objtype.parameters) do
     if ptype.hidden then
-      if not result then
-        result = {}
+      if should_be_unhidden(objtype.name..pname, unhide_patterns) then
+        ptype.hidden = nil
+      else
+        if not result then
+          result = {}
+        end
+        local returned_value = ptype.default
+        if not returned_value then
+          returned_value = default_hidden_values[ptype.type] or ""
+        end
+        result[pname] = returned_value
       end
-      local returned_value = ptype.default
-      if not returned_value then
-        returned_value = default_hidden_values[ptype.type] or ""
-      end
-      result[pname] = returned_value
     end
   end
   if result and next(result) then
@@ -295,13 +310,13 @@ local function memoize_paramtypes(mapping)
   end
 end
 
-local function create_map_env(store, commitapply, ignore_patterns, vendor_patterns)
+local function create_map_env(store, commitapply, ignore_patterns, vendor_patterns, unhide_patterns)
   -- The environment available to a mapping.
   -- All these functions can throw an error.
   local function register(mapping)
     local ok, reason = validate_mapping(mapping, ignore_patterns, vendor_patterns)
     if ok then
-      hidden_mapping(mapping)
+      hidden_mapping(mapping, unhide_patterns)
       alias_mapping(store, mapping)
       memoize_paramtypes(mapping.objectType)
       store:add_mapping(mapping)
@@ -458,9 +473,10 @@ local M = {}
 --          load files ending with ".map".
 -- @param ignore_patterns A table of datamodel patterns that need to be ignored by Transformer.
 -- @param vendor_patterns A table of vendor extension patterns that need to be allowed by Transformer.
+-- @param unhide_patterns A table of datamodel patterns that must not be hidden by Transformer.
 -- @return 'true' if all went well and nil + error message otherwise
-function M.load_all_maps(store, commitapply, mappath, ignore_patterns, vendor_patterns)
-  local map_env = create_map_env(store, commitapply, ignore_patterns, vendor_patterns)
+function M.load_all_maps(store, commitapply, mappath, ignore_patterns, vendor_patterns, unhide_patterns)
+  local map_env = create_map_env(store, commitapply, ignore_patterns, vendor_patterns, unhide_patterns)
   -- a single mapping file is provided
   store.persistency:startTransaction()
   if lfs.attributes(mappath, 'mode') == 'file' then

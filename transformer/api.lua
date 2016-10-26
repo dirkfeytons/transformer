@@ -483,6 +483,7 @@ end
 --                        transformer.db
 --     ignore_patterns : (optional) A table of patterns for typepaths that need to be ignored.
 --     vendor_patterns : (optional) A table of patterns of vendor extensions for paths that should be allowed.
+--     unhide_patterns : (optional) A table of patterns for typepaths that must not be hidden.
 -- @return An object on which you can call various methods or nil + error
 --         message if something went wrong.
 function M.init(config)
@@ -505,7 +506,7 @@ function M.init(config)
     -- TODO: move this into mapload.load_all_maps so we can reuse the map env
     local mapload = require("transformer.mapload")
     for path in config.mappath:gmatch("([^:]+)") do
-        local rc, err = mapload.load_all_maps(self.store, self.commitapply, path, config.ignore_patterns, config.vendor_patterns)
+        local rc, err = mapload.load_all_maps(self.store, self.commitapply, path, config.ignore_patterns, config.vendor_patterns, config.unhide_patterns)
         if not rc then
             self:close()
             return nil, err

@@ -63,6 +63,9 @@ do
       if uci_config.vendor_patterns then
         config.vendor_patterns = uci_config.vendor_patterns
       end
+      if uci_config.unhide_patterns then
+        config.unhide_patterns = uci_config.unhide_patterns
+      end
     end
     return config
   end
@@ -76,6 +79,7 @@ do
     log_stderr = false,
     ignore_patterns = nil,
     vendor_patterns = nil,
+    unhide_patterns = nil,
   }
   config = do_config(config)
   logger.init(config.log_level, config.log_stderr)
