@@ -399,7 +399,8 @@ end
 -- information available in the given binding.
 -- @param #binding binding The binding representing the location of the parameter in uci.
 --                 This binding should contain at least 2 named table entries:
---                 config, sectionname, option(optional), default(optional), state(optional), extended(optional)
+--                 config (string), sectionname (string), option (string, optional),
+--                 default (string, optional), state (boolean, optional), extended (boolean, optional)
 --                 When option is undefined, the section type is retrieved.
 --                 When extended is defined, extended syntax lookup is performed.
 -- @return #string In order of return preference: The value in UCI, the default defined
@@ -447,7 +448,7 @@ end
 -- information available in the given binding.
 -- @param #binding binding The binding representing the location of the parameter in uci.
 --                 This binding should contain at least 1 named table entries:
---                 config, sectionname (optional), extended (optional)
+--                 config (string), sectionname (string, optional), extended (boolean, optional)
 -- @return #table
 function M.getall_from_uci(binding)
   --trace_binding(binding, "getall_from_uci")
@@ -481,7 +482,8 @@ end
 -- information available in the given binding.
 -- @param #binding binding The binding representing the location of the parameter in uci.
 --                This binding should contain at least 2 named table entries:
---                config, sectionname, option (optional), extended (optional)
+--                config (string), sectionname (string), option (string, optional),
+--                extended (boolean, optional)
 --                When option is undefined, the section type is set.
 --                When extended is defined, extended syntax lookup is performed.
 -- @param #string value The value that needs to be set
@@ -574,7 +576,7 @@ end
 --- Function which adds an object on uci.
 -- @param #binding binding The binding representing the object type that needs to be added
 --                This binding should contain at least 2 named table entries:
---                config, sectionname
+--                config (string), sectionname (string)
 --                In this case the section name actually represents the section type.
 -- @param commitapply The Commit & Apply context (optional)
 -- @return #string The name of the newly created object
@@ -611,7 +613,8 @@ end
 --- Function to delete an object on uci
 -- @param #binding binding The binding representing the instance that needs to be deleted
 --                This binding should contain at least 2 named table entries:
---                config, sectionname, option (optional), extended (optional)
+--                config (string), sectionname (string), option (string, optional),
+--                extended (boolean, optional)
 --                When option is undefined, the entire section is deleted.
 --                When extended is defined, extended syntax lookup is performed.
 -- @param commitapply The Commit & Apply context (optional)
@@ -663,7 +666,7 @@ end
 --- Function to change an item index inside the uci datamodel
 -- @param #binding binding The binding representing the instance that needs to be deleted
 --                This binding should contain at least 2 named table entries:
---                config, sectionname, extended (optional)
+--                config (string), sectionname (string), extended (boolean, optional)
 --                When extended is defined, extended syntax lookup is performed.
 -- @param #number index   The new index to use for the item
 -- @param commitapply The Commit & Apply context (optional)
@@ -707,7 +710,7 @@ end
 -- @param #binding binding The binding representing the config and the type over which
 --                needs to be iterated.
 --                This binding should contain at least 1 named table entries:
---                config, sectionname(optional), state(optional)
+--                config (string), sectionname (string, optional), state (boolean, optional)
 --                When sectionname is nil, all sections will be iterated regardless of type.
 -- @param func    The function that needs to be executed for each instance.
 function M.foreach_on_uci(binding,func)
@@ -742,7 +745,7 @@ end
 --- Function which reverts the state of uci
 -- @param #binding binding The binding representing the config that needs to be reverted
 --                This binding should contain at least 1 named table entry:
---                config
+--                config (string)
 function M.revert(binding)
   --trace_binding(binding, "revert")
   local config = binding.config
@@ -771,7 +774,7 @@ end
 -- @param #binding binding The binding representing the config and the section for which
 --                a unique key needs to be generated.
 --                This binding should contain at least 2 named table entries:
---                config, sectionname
+--                config (string), sectionname (string)
 -- @param #string key The key to store in UCI. Optionally; if not provide a key will
 --                    be generated.
 -- NOTE: This function works on a separate cursor and needs to be followed by either
