@@ -11,6 +11,8 @@ to the system's management plane.
 Documentation on how a mapping file must look like can be found in `./doc/skeleton.map`.
 The datamodel metadata part of a mapping file can be generated using `./generator/generator.sh`.
 
+Other documentation can be found on the [wiki](https://github.com/dirkfeytons/transformer/wiki).
+
 ## Dependencies
 
 `Transformer` requires the following dependencies to work:
