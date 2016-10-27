@@ -23,9 +23,8 @@ Other documentation can be found on the [wiki](https://github.com/dirkfeytons/tr
 - [SQLite3 and LuaSQLite3](http://lua.sqlite.org/index.cgi/index)
 - [lua-tch](https://github.com/dirkfeytons/lua-tch)
 - [UCI](https://git.lede-project.org/?p=project/uci.git)
-  - Two additional functions in the Lua UCI binding are expected by Transformer,
-  see [patch 1](https://patchwork.ozlabs.org/patch/676647/) and
-  [patch 2](https://patchwork.ozlabs.org/patch/676648/) on the LEDE Patchwork page.
+  - Transformer uses two functions that were only added to the Lua UCI binding
+  on 2016-10-27 so make sure your UCI code is from after that date.
 - [ubus](https://git.lede-project.org/?p=project/ubus.git) (not required for
   starting up; only if mappings use the ubus eventsource)
 
