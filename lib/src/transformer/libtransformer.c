@@ -25,6 +25,7 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/time.h>
 
 #define TF_LOG_CRIT(FMT, ...)     syslog(LOG_CRIT,    "%s%s: " FMT, "[libtransformer] ", __func__, ##__VA_ARGS__)
 #define TF_LOG_ERR(FMT, ...)      syslog(LOG_ERR,     "%s%s: " FMT, "[libtransformer] ", __func__, ##__VA_ARGS__)
