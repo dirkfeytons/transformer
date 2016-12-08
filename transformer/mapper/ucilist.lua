@@ -43,7 +43,7 @@ local function key_generation(index, parentkey)
   return { displayname, key }
 end
 
-local function create_binding(mapping, parentkey)
+local function get_sectionname(mapping, parentkey)
   local sectionname
   if not mapping.parent.index_spec then
     sectionname = mapping.binding.sectionname
@@ -60,28 +60,47 @@ local function create_binding(mapping, parentkey)
       sectionname = parentkey
     end
   end
-  local binding = mapping.binding
-  binding.sectionname = sectionname
-  return binding
+  return sectionname
 end
 
-local function load_elements(mapping, parentkey)
-  local binding = create_binding(mapping, parentkey)
+local function get_elements(mapping, parentkey)
+  local binding = mapping.binding
+  binding.sectionname = get_sectionname(mapping, parentkey)
   local elements = uci_helper.get_from_uci(binding)
   if type(elements) ~= "table" then
     elements = {}
   end
-  mapping.elements[parentkey] = elements
   return elements
 end
 
-local function save_elements(mapping, parentkey)
-  local binding = create_binding(mapping, parentkey)
-  uci_helper.delete_on_uci(binding, mapping.commitapply)
-  if #mapping.elements[parentkey] > 0 then
-    uci_helper.set_on_uci(binding, mapping.elements[parentkey], mapping.commitapply)
+local function save_elements(mapping, parentkey, elements)
+  local binding = mapping.binding
+  binding.sectionname = get_sectionname(mapping, parentkey)
+  if #elements > 0 then
+    uci_helper.set_on_uci(binding, elements, mapping.commitapply)
+  else
+    uci_helper.delete_on_uci(binding, mapping.commitapply)
   end
-  mapping.transaction[binding.sectionname] = true
+  mapping.transaction = true
+end
+
+--- Helper function to execute the appropriate transaction function.
+-- @param fn The function to execute to complete the transaction (commit or revert).
+-- @param mapping The mapping on which the transaction function needs to be executed.
+--                This mapping should contain uci binding.
+-- @return nil + nil or nil + error message
+local function do_transaction(fn, mapping)
+  local result, errmsg
+  if mapping.transaction then
+    result, errmsg = fn(mapping.binding)
+    if not result then
+      -- uci_helper returns false + error message but
+      -- Transformer wants nil + error message
+      result = nil
+    end
+  end
+  mapping.transaction = false
+  return result, errmsg
 end
 
 --- A generic get function for a uci list object.
@@ -91,7 +110,9 @@ end
 -- @param key The key that uniquely identifies the list element specified by
 --            the given mapping (= index).
 local function get(mapping, _, key, parentkey)
-  return mapping.elements[parentkey or 0][index_extraction(key)]
+  parentkey = parentkey or 0
+  local elements = get_elements(mapping, parentkey)
+  return elements[index_extraction(key)]
 end
 
 --- A generic set function for a uci list object.
@@ -103,8 +124,9 @@ end
 --            the given mapping (= index).
 local function set(mapping, _, value, key, parentkey)
   parentkey = parentkey or 0
-  mapping.elements[parentkey][index_extraction(key)] = value
-  save_elements(mapping, parentkey)
+  local elements = get_elements(mapping, parentkey)
+  elements[index_extraction(key)] = value
+  save_elements(mapping, parentkey, elements)
 end
 
 --- A generic add function for a uci list object.
@@ -115,9 +137,9 @@ local function add(mapping, name, parentkey)
     error("Add with given name is not supported.")
   end
   parentkey = parentkey or 0
-  local elements = load_elements(mapping, parentkey)
+  local elements = get_elements(mapping, parentkey)
   elements[#elements + 1] = ""
-  save_elements(mapping, parentkey)
+  save_elements(mapping, parentkey, elements)
   return key_generation(#elements, parentkey)
 end
 
@@ -129,12 +151,12 @@ end
 local function delete(mapping, key, parentkey)
   parentkey = parentkey or 0
   local idx = index_extraction(key)
-  local elements = mapping.elements[parentkey]
+  local elements = get_elements(mapping, parentkey)
   if idx > #elements then
     return nil, "The object that needs to be deleted does not exist"
   end
   remove(elements, idx)
-  save_elements(mapping, parentkey)
+  save_elements(mapping, parentkey, elements)
   return true
 end
 
@@ -144,8 +166,7 @@ end
 -- @param parentkey The key that uniquely identifies the list parent.
 local function deleteall(mapping, parentkey)
   parentkey = parentkey or 0
-  mapping.elements[parentkey] = {}
-  save_elements(mapping, parentkey)
+  save_elements(mapping, parentkey, {})
   return true
 end
 
@@ -154,7 +175,7 @@ end
 --                This mapping should contain uci binding.
 local function entries(mapping, parentkey)
   parentkey = parentkey or 0
-  local elements = load_elements(mapping, parentkey)
+  local elements = get_elements(mapping, parentkey)
   local keys = {}
   for i = 1, #elements do
     keys[#keys + 1] = key_generation(i, parentkey)
@@ -164,36 +185,12 @@ end
 
 --- A generic commit function for a mapping.
 local function commit(mapping)
-  local result, errmsg
-  local binding = mapping.binding
-  for sectionname in pairs(mapping.transaction) do
-    binding.sectionname = sectionname
-    result, errmsg = uci_helper.commit(binding)
-    if not result then
-      -- uci_helper returns false + error message but
-      -- Transformer wants nil + error message
-      result = nil
-    end
-  end
-  mapping.transaction = {}
-  return result, errmsg
+  return do_transaction(uci_helper.commit, mapping)
 end
 
---- A genertic revert function for a mapping.
+--- A generic revert function for a mapping.
 local function revert(mapping)
-  local result, errmsg
-  local binding = mapping.binding
-  for sectionname in pairs(mapping.transaction) do
-    binding.sectionname = sectionname
-    result, errmsg = uci_helper.revert(binding)
-    if not result then
-      -- uci_helper returns false + error message but
-      -- Transformer wants nil + error message
-      result = nil
-    end
-  end
-  mapping.transaction = {}
-  return result, errmsg
+  return do_transaction(uci_helper.revert, mapping)
 end
 
 ---
@@ -224,7 +221,7 @@ function M.createListMap(parentmapping, config, section, type, list)
       }
     },
     parent = parentmapping,
-    transaction = {},
+    transaction = false,
     binding = {
       config = config,
       sectionname = section,
@@ -240,7 +237,6 @@ function M.createListMap(parentmapping, config, section, type, list)
     entries = entries,
     commit = commit,
     revert = revert,
-    elements = {}
   }
 end
 
