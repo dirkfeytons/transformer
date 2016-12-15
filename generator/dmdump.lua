@@ -14,6 +14,7 @@ See LICENSE file for more details.
 
 local tf = require("datamodel")
 local dir = require("lfs").dir
+local uci = require("uci")
 local attributes = require("lfs").attributes
 local match, format = string.match, string.format
 local print, loadfile, setfenv, pcall, pairs, ipairs, tostring, type =
@@ -136,6 +137,55 @@ do
     return dst
   end
 
+  --check unhide_pattern
+  local function check_unhide_patterns(path, unhide_patterns)
+    for _, unhide in ipairs(unhide_patterns) do
+      if match(path, unhide) then
+        return true
+      end
+    end
+    return false
+  end
+
+  --check ignore and vendor patterns
+  local function check_ignore_patterns(path, ignore_patterns, vendor_patterns)
+    for _, ignore in ipairs(ignore_patterns) do
+      if match(path, ignore) then
+        return true
+      end
+    end
+    if match(path, "%.X_") and not match(path, "%.X_000E50_") then
+      for _, vendor in ipairs(vendor_patterns) do
+        if match(path, vendor) then
+          return false
+        end
+      end
+      return true
+    end
+    return false
+  end
+
+  -- make support ignore_pattern, vendor_pattern, unhide_pattern
+  local function mapping_patterns_support(mapping, patterns)
+    local objtype = mapping.objectType
+    local name = objtype.name
+    if objtype.numEntriesParameter and
+       check_ignore_patterns("." .. objtype.numEntriesParameter, patterns.ignore_patterns, patterns.vendor_patterns) then
+      objtype.numEntriesParameter = nil
+    end
+    for pname, ptype in pairs(objtype.parameters) do
+      local full_name = name .. pname
+      if check_ignore_patterns(full_name, patterns.ignore_patterns, patterns.vendor_patterns) then
+        objtype.parameters[pname] = nil
+      end
+      if ptype.hidden  then
+        if check_unhide_patterns(full_name, patterns.unhide_patterns) then
+          ptype.hidden = nil
+        end
+      end
+    end
+  end
+
   -- In some mappings (e.g. WANDSLInterfaceConfig.Stats.*) they share
   -- the parameters table. We nil out certain fields to do some sanity
   -- checks at the end and this will wreak havoc unless we detect this
@@ -150,10 +200,19 @@ do
     end
   end
 
+  local cursor = uci.cursor()
+  local uci_config = cursor:get_all("transformer.@main[0]")
+  local patterns = {}
+  patterns.unhide_patterns = uci_config and uci_config.unhide_patterns or {}
+  patterns.ignore_patterns = uci_config and uci_config.ignore_patterns or {}
+  patterns.vendor_patterns = uci_config and uci_config.vendor_patterns or {}
+  cursor:close()
+
   local function env_register(mapping)
     local objtype = mapping.objectType
     check_parameters_reuse(objtype)
     g_objtypes[#g_objtypes + 1] = objtype
+    mapping_patterns_support(mapping, patterns)
     if objtype.numEntriesParameter then
       local parent = objtype.name:match("(.+%.)[^%.]+%.[^%.]+%.$")
       if parent then
