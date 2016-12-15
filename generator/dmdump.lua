@@ -422,12 +422,19 @@ do
   local function write_params(f, params)
     for name, info in pairs(params) do
       fprintf(f, '    <parameter %s>', get_param_attribs(name, info))
-      f:write(   '      <description/>', '\n')
+      if info.description then
+        f:write( '      <description>', '\n')
+        f:write( '        ', info.description, '\n')
+        f:write( '      </description>', '\n')
+      else
+        f:write( '      <description/>', '\n')
+      end
       fprintf(f, '      <syntax%s>', info.hidden and ' hidden="true"' or '')
       write_syntax(f, info)
       f:write(   '      </syntax>', '\n')
       f:write(   '    </parameter>', '\n')
       info.hidden = nil
+      info.description = nil
     end
   end
 
@@ -463,9 +470,16 @@ do
 
   local function write_objtype(f, objtype)
     fprintf(f, '  <object %s>', get_objtype_attribs(objtype))
-    f:write(   '    <description/>', '\n')
+    if objtype.description then
+      f:write( '    <description>', '\n')
+      f:write( '      ', objtype.description, '\n')
+      f:write( '    </description>', '\n')
+    else
+      f:write( '    <description/>', '\n')
+    end
     write_params(f, objtype.parameters)
     f:write(   '  </object>', '\n')
+    objtype.description = nil
   end
 
   local igd_header = [[
