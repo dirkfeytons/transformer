@@ -137,6 +137,15 @@ local function validate_mapping(mapping, ignore_patterns, vendor_patterns)
   if byte(objtype.name, #objtype.name) ~= 46 then
     error(format("'%s' doesn't end with a dot", name), 3)
   end
+  -- Generate a warning if the objtype is a vendor extension and there's no description.
+  -- note: 'name' will match if .X_ appears anywhere in the full name of the objtype
+  -- i.e. also when this mapping registers an objtype that itself doesn't have the X_
+  -- in its name but one of its ancestors has.
+  if match(name, "%.X_") and not (objtype.description) then
+      logger:warning("'%s': no description", name)
+  end
+  -- We remove 'objtype.description' in memory because it's not needed at runtime.
+  objtype.description = nil
   -- If we ignore the object type, we throw an error to invalidate the mapping.
   if is_ignored(name, ignore_patterns, vendor_patterns) then
     return nil, format("'%s' is actively ignored", name)
@@ -207,29 +216,36 @@ local function validate_mapping(mapping, ignore_patterns, vendor_patterns)
     end
   end
   for pname, ptype in pairs(objtype.parameters) do
+    local full_name = name..pname
     if type(pname) ~= "string" then
       error(format("'%s': parameter table is invalid", name), 3)
+    end
+    -- Generate a warning if the parameter is a vendor extension and there's no description.
+    if match(full_name, "%.X_") and not ptype.description then
+      logger:warning("'%s': no description", full_name)
     end
     if type(ptype) ~= "table" then
       error(format("'%s': '%s' not a %s", name, pname, "table"), 3)
     end
+    -- We remove 'ptype.description' in memory because it's not needed at runtime.
+    ptype.description = nil
     if not default_hidden_values[ptype.type]  then
-      error(format("'%s%s': invalid type '%s'", name, pname, ptype.type or "nil"), 3)
+      error(format("'%s': invalid type '%s'", full_name, ptype.type or "nil"), 3)
     end
     if ptype.access == "readWrite" then
       if pname ~= objtype.aliasParameter then
         local set = mapping.set
         local type_set = type(set)
         if type_set ~= "function" and (type_set ~= "table" or type(set[pname]) ~= "function") then
-          error(format("'%s%s': no setter", name, pname), 3)
+          error(format("'%s': no setter", full_name), 3)
         end
       end
     elseif ptype.access ~= "readOnly" then
-      error(format("'%s%s': 'access' should be 'readOnly' or 'readWrite'", name, pname), 3)
+      error(format("'%s': 'access' should be 'readOnly' or 'readWrite'", full_name), 3)
     end
     local type_default = type(ptype.default)
     if type_default ~= "nil" and type_default ~= "string" then
-      error(format("'%s%s': '%s' not a %s", name, pname, "default", "string"), 3)
+      error(format("'%s': '%s' not a %s", full_name, "default", "string"), 3)
     end
     local get = mapping.get
     local type_get = type(get)
@@ -237,11 +253,11 @@ local function validate_mapping(mapping, ignore_patterns, vendor_patterns)
       if type_get ~= "function" and
          (type_get ~= "table" or (type(get[pname]) ~= "function"
            and type(get[pname]) ~= "string")) then
-        error(format("'%s%s': no getter", name, pname), 3)
+        error(format("'%s': no getter", full_name), 3)
       end
     end
     -- If a parameter path is ignored, remove the parameter from the object type.
-    if is_ignored(name..pname, ignore_patterns, vendor_patterns) then
+    if is_ignored(full_name, ignore_patterns, vendor_patterns) then
       objtype.parameters[pname] = nil
     end
   end
