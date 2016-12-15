@@ -225,8 +225,8 @@ do
   log("loaded %d objecttypes from %s", #g_objtypes, concat(g_mappaths, " and "))
   table.sort(g_objtypes, function(objtype1, objtype2) return objtype1.name < objtype2.name end)
 
-  -- Step 1.2: add NumberOfEntries parameters to the parent objecttypes
   for _, objtype in ipairs(g_objtypes) do
+    -- Step 1.2: add NumberOfEntries parameters to the parent objecttypes
     local params = g_numEntriesParams[objtype.name]
     if params then
       for _, param in ipairs(params) do
@@ -237,6 +237,12 @@ do
       end
       g_numEntriesParams[objtype.name] = nil
     end
+    -- Step 1.3: add aliasParameter flag
+    local param = objtype.parameters[objtype.aliasParameter]
+    if param then
+      param.is_alias = true
+    end
+    objtype.aliasParameter = nil
   end
   if next(g_numEntriesParams) then
     log("could not add NumberOfEntries parameters for:")
@@ -309,7 +315,9 @@ do
         f:write('/>', '\n')
       end
     end
-    if info.enumeration or info.max or info.range then
+    if info.is_alias then
+      f:write(format('        <dataType ref="Alias"/>\n'))
+    elseif info.enumeration or info.max or info.range then
       fprintf(f, '        <%s>', info.type)
       if info.enumeration then
         for _, enum in ipairs(info.enumeration) do
@@ -339,6 +347,7 @@ do
     -- Clear the attribs we used (or explicitly didn't use)
     -- so we can later do a sanity check for possibly new attributes
     -- that the script doesn't support yet.
+    info.is_alias = nil
     info.list = nil
     info.minItems = nil
     info.maxItems = nil
