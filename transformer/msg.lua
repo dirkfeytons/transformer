@@ -39,6 +39,8 @@ local GPL_REQ = 20
 local GPL_RESP = 21
 local GPC_REQ = 22
 local GPC_RESP = 23
+local GPV_NO_ABORT_REQ = 24
+local GPV_NO_ABORT_RESP = 25
 
 
 -------------------------------------------------------------
@@ -259,6 +261,30 @@ Msg.tags = {
   -- call to msg.encode().
   -- Decoding such a message returns a number.
   GPC_RESP = GPC_RESP,
+  --- GPV No Abort request message consists of (excluding tag byte and
+  -- identification bytes) one or more sets of the following:
+  -- * 2 bytes (big endian) for length of following string
+  -- * string representing path to retrieve
+  -- To encode such a message you provide one path in each
+  -- call to msg.encode().
+  -- Decoding such a message returns an array of the paths.
+  GPV_NO_ABORT_REQ = GPV_NO_ABORT_REQ,
+  --- GPV No Abort response message consists of (excluding tag byte)
+  -- one or more sets of the following:
+  -- * 2 bytes (big endian) for length of following string
+  -- * string representing the path to the object
+  -- * 2 bytes length
+  -- * string representing the parameter name
+  -- * 2 bytes length
+  -- * string representing the parameter value. If the type is 'error', this will contain the error message.
+  -- * 2 bytes length
+  -- * string representing the type. If an error occurred, the type will be 'error'.
+  -- To encode such a message you provide a path string, a
+  -- value string and a type string in each call to
+  -- msg.encode().
+  -- Decoding such a message returns an array of tables
+  -- with 'path', 'param', 'value' and 'type' fields.
+  GPV_NO_ABORT_RESP = GPV_NO_ABORT_RESP,
 }
 
 Msg.header_length = 1
@@ -352,6 +378,8 @@ local function load_functions(coder)
   result[GPL_RESP] = coder.GPL_RESP
   result[GPC_REQ] = coder.GPC_REQ
   result[GPC_RESP] = coder.GPC_RESP
+  result[GPV_NO_ABORT_REQ] = coder.GPV_NO_ABORT_REQ
+  result[GPV_NO_ABORT_RESP] = coder.GPV_NO_ABORT_RESP
   return result
 end
 

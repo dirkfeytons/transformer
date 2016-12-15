@@ -19,7 +19,7 @@ Decoder.__index = Decoder
 local function isRequest(self, tag)
   if tag == self.tags["GPV_REQ"] or tag == self.tags["SPV_REQ"] or tag == self.tags["APPLY"] or tag == self.tags["ADD_REQ"]
      or tag == self.tags["DEL_REQ"] or tag == self.tags["GPN_REQ"] or tag == self.tags["RESOLVE_REQ"] or tag == self.tags["SUBSCRIBE_REQ"]
-     or tag == self.tags["UNSUBSCRIBE_REQ"] or tag == self.tags["GPL_REQ"] or tag == self.tags["GPC_REQ"] then
+     or tag == self.tags["UNSUBSCRIBE_REQ"] or tag == self.tags["GPL_REQ"] or tag == self.tags["GPC_REQ"] or tag == self.tags["GPV_NO_ABORT_REQ"] then
     return true
   end
   return false
@@ -217,6 +217,10 @@ function Decoder:GPC_RESP()
   return decode_number(self)
 end
 
+--- Decodes a GPV_NO_ABORT_RESP message consisting of a path, name, value and type.
+-- @return #table An array of tables with 'path', 'param', 'value' and 'type' fields.
+Decoder.GPV_NO_ABORT_RESP = Decoder.GPV_RESP
+
 ----------------------
 -- Request messages --
 ----------------------
@@ -322,6 +326,10 @@ function Decoder:GPC_REQ()
   end
   return data
 end
+
+--- Decodes a GPV_NO_ABORT_REQ message consisting of one or more paths.
+-- @return #table An array of paths.
+Decoder.GPV_NO_ABORT_REQ = Decoder.GPV_REQ
 
 --- Initialize the decoder environment to start decoding.
 -- @param #string msg The message that needs to be decoded.

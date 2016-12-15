@@ -34,6 +34,7 @@ local GPV_REQ, GPV_RESP, SPV_REQ, SPV_RESP, ADD_REQ, ADD_RESP, DEL_REQ
 local GPN_RESP, GPN_REQ, DEL_RESP, RESOLVE_REQ, RESOLVE_RESP, APPLY, ERROR
 local SUBSCRIBE_REQ, SUBSCRIBE_RESP, UNSUBSCRIBE_REQ, UNSUBSCRIBE_RESP
 local GPL_REQ, GPL_RESP, GPC_REQ, GPC_RESP
+local GPV_NO_ABORT_REQ, GPV_NO_ABORT_RESP
 
 do
   GPV_REQ = msg.tags.GPV_REQ
@@ -58,6 +59,8 @@ do
   GPC_RESP = msg.tags.GPC_RESP
   APPLY = msg.tags.APPLY
   ERROR = msg.tags.ERROR
+  GPV_NO_ABORT_REQ = msg.tags.GPV_NO_ABORT_REQ
+  GPV_NO_ABORT_RESP = msg.tags.GPV_NO_ABORT_RESP
 end
 
 local select, ipairs, pairs, type =
@@ -140,32 +143,62 @@ function M.enable_tainting()
   untaint = string.untaint
 end
 
+local function encode_path(path)
+  path = untaint(path)
+  if type(path) ~= "string" then
+    return false
+  end
+  msg:encode(path)
+  return true
+end
+
+local function encode_get_with_abort(uuid, tbl_of_paths, abort_on_error)
+  if abort_on_error then
+    msg:init_encode(GPV_REQ, max_size, uuid)
+  else
+    msg:init_encode(GPV_NO_ABORT_REQ, max_size, uuid)
+  end
+  for _, path in ipairs(tbl_of_paths) do
+    if not encode_path(path) then
+      return nil, "not string argument", fault.INVALID_ARGUMENTS
+    end
+  end
+  return true
+end
+
+local function encode_get(uuid, ...)
+  return encode_get_with_abort(uuid, {...}, true)
+end
+
 ---
 -- Retrieve the values of the given datamodel location(s).
--- Pass it one or more strings, each either a partial or exact path.
--- Returns array of tables with 'path', 'param', 'value' and 'type' fields
--- or nil + error message + error code.
--- Throws an error if you pass anything other than strings.
-function M.get(uuid, ...)
+-- This function has two signatures:
+--   get(uuid, path1, path2, ...)
+--     Pass it one or more strings, each either a partial or exact path.
+-- and
+--   get(uuid, {path1, path2,...}, abort_on_error)
+--     The partial or exact paths are passed in as a table. The optional third
+--     parameter indicates if we wish to abort in case of an error or not.
+-- Returns array of tables with 'path', 'param', 'value' and 'type' fields.
+-- If an error occurs and the abort_on_error flag is not set, a second array
+-- is returned of tables with 'path, 'param' and 'errmsg' fields.
+-- If an error occurs and the abort_on_error flag is set or the error is unrecoverable,
+-- nil + error message + error code is returned.
+function M.get(uuid, first_arg, second_arg, ...)
   if uuid == nil or uuid == "" then
     return nil, "no UUID", fault.INVALID_ARGUMENTS
   end
-  local nb_args = select("#", ...)
-  if nb_args == 0 then
+  if not first_arg then
     return nil, "no data", fault.INVALID_ARGUMENTS
   end
-  -- construct message to send to Transformer
-  msg:init_encode(GPV_REQ, max_size, uuid)
-  for i = 1, nb_args do
-    local path = select(i, ...)
-    if type(path) ~= "string" then
-      if istainted(path) then
-        path = untaint(path)
-      else
-        return nil, "not string argument", fault.INVALID_ARGUMENTS
-      end
-    end
-    msg:encode(path)
+  local ok, errmsg, errcode
+  if type(first_arg) == "table" then
+    ok, errmsg, errcode = encode_get_with_abort(uuid, first_arg, second_arg)
+  else
+    ok, errmsg, errcode = encode_get(uuid, first_arg, second_arg, ...)
+  end
+  if not ok then
+    return ok, errmsg, errcode
   end
   msg:mark_last()
   -- send the request
@@ -175,6 +208,7 @@ function M.get(uuid, ...)
   end
   -- process the response
   local results = {}
+  local errors = {}
   local is_last = false
   while not is_last do
     local tag, resp
@@ -190,13 +224,29 @@ function M.get(uuid, ...)
       resp = msg:decode()
       release_sk(sk)
       return nil, resp.errmsg, resp.errcode
+    elseif tag == GPV_NO_ABORT_RESP then
+      resp = msg:decode()
+      for _, single_resp in ipairs(resp) do
+        if single_resp.type == 'error' then
+          single_resp.errmsg = single_resp.value
+          single_resp.value = nil
+          single_resp.type = nil
+          errors[#errors + 1] = single_resp
+        else
+          single_resp.value = taint(single_resp.value)
+          results[#results + 1] = single_resp
+        end
+      end
     else
       release_sk(sk)
       return nil, "invalid response type", fault.INTERNAL_ERROR
     end
   end
   release_sk(sk)
-  return results
+  if #errors == 0 then
+    errors = nil
+  end
+  return results, errors
 end
 
 ---
@@ -551,14 +601,9 @@ function M.getPL(uuid, ...)
   msg:init_encode(GPL_REQ, max_size, uuid)
   for i = 1, nb_args do
     local path = select(i, ...)
-    if type(path) ~= "string" then
-      if istainted(path) then
-        path = untaint(path)
-      else
-        return nil, "not string argument"
-      end
+    if not encode_path(path) then
+      return nil, "not string argument"
     end
-    msg:encode(path)
   end
   msg:mark_last()
   -- send the request
@@ -605,14 +650,9 @@ function M.getPC(uuid, ...)
   msg:init_encode(GPC_REQ, max_size, uuid)
   for i = 1, nb_args do
     local path = select(i, ...)
-    if type(path) ~= "string" then
-      if istainted(path) then
-        path = untaint(path)
-      else
-        return nil, "not string argument"
-      end
+    if not encode_path(path) then
+      return nil, "not string argument"
     end
-    msg:encode(path)
   end
   msg:mark_last()
   -- send the request

@@ -215,6 +215,13 @@ function Encoder:GPC_RESP(pcount)
   return confirm_encoding(self)
 end
 
+--- Encodes a GPV_NO_ABORT_RESP message consisting of a path, name, value and type.
+-- @param #string ppath The path to be encoded.
+-- @param #string pname The parameter name to be encoded.
+-- @param #string pvalue The parameter value to be encoded.
+-- @param #string ptype The parameter type to be encoded.
+Encoder.GPV_NO_ABORT_RESP = Encoder.GPV_RESP
+
 ----------------------
 -- Request messages --
 ----------------------
@@ -310,6 +317,10 @@ function Encoder:GPC_REQ(path)
   encode_string(self, path)
   return confirm_encoding(self)
 end
+
+--- Encodes a GPV_NO_ABORT_REQ message consisting of a path.
+-- @param #string path The path to be encoded.
+Encoder.GPV_NO_ABORT_REQ = Encoder.GPV_REQ
 
 ---
 -- Initialize the encoder environment to encode messages of the given tag.

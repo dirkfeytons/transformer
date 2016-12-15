@@ -113,7 +113,7 @@ local function get_without_abort(uuid, store, navigate, path, cb)
   -- create object iterator
   local rc, obj_it, obj_it_state = pcall(navigate, store, uuid, path, "get")
   if not rc then
-    -- failed to create iterator; `it` is now the error object
+    -- failed to create iterator; `obj_it` is now the error object
     call_cb(cb, path, "", "", "", obj_it.errcode, obj_it.errmsg)
     return
   end
@@ -124,7 +124,10 @@ local function get_without_abort(uuid, store, navigate, path, cb)
     rc, obj = pcall(obj_it, obj_it_state)
     if not rc then
       -- failed to get the next object; `obj` is now the error object
-      call_cb(cb, current_path, "", "", "", obj.errcode, obj.errmsg)
+      -- The last path that was handled by the object iterator (and thus caused
+      -- the failure) is available in obj_it_state and is not necessarily the same as current_path.
+      -- Reporting this path in the callback will give a better error message.
+      call_cb(cb, obj_it_state.objpath, "", "", "", obj.errcode, obj.errmsg)
       -- stop the object iteration
       break
     end
@@ -137,7 +140,7 @@ local function get_without_abort(uuid, store, navigate, path, cb)
     local param_it, param_it_state
     rc, param_it, param_it_state = pcall(obj.params, obj)
     if not rc then
-      -- failed to create iterator; `it2` is now the error object
+      -- failed to create iterator; `param_it` is now the error object
       call_cb(cb, current_path, "", "", "", param_it.errcode, param_it.errmsg)
       -- don't break; move on to the next object
     else

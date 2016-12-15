@@ -108,6 +108,7 @@ local SUBSCRIBE_RESP = tags.SUBSCRIBE_RESP
 local UNSUBSCRIBE_RESP = tags.UNSUBSCRIBE_RESP
 local GPL_RESP = tags.GPL_RESP
 local GPC_RESP = tags.GPC_RESP
+local GPV_NO_ABORT_RESP = tags.GPV_NO_ABORT_RESP
 
 local function encode_wrapper(type, sk, from, ...)
   local success = msg:encode(...)
@@ -140,6 +141,37 @@ local function handle_GPV(sk, from, uuid, req)
   if not rc then
     -- an error occurred: discard any data already queued, send an
     -- error message to the client and stop the GPV
+    msg:init_encode(ERROR, max_size)
+    msg:encode(errcode, errmsg)
+  end
+  -- send any data still left in the buffer with the 'last' flag set
+  msg:mark_last()
+  sk:sendto(msg:retrieve_data(), from)
+end
+
+local GPV_NO_ABORT_cb_env = {}
+local function GPV_NO_ABORT_cb(ppath, pname, pvalue, ptype, errcode, errmsg)
+  if errmsg then
+    ptype = 'error'
+    pvalue = errmsg
+    -- Ignoring errcode for now
+  end
+  encode_wrapper(GPV_NO_ABORT_RESP, sk, from, ppath, pname, pvalue, ptype)
+end
+setfenv(GPV_NO_ABORT_cb, GPV_NO_ABORT_cb_env)
+
+local function handle_GPV_NO_ABORT(sk, from, uuid, req)
+  -- prepare environment for GPV_NO_ABORT callback
+  GPV_NO_ABORT_cb_env.sk = sk
+  GPV_NO_ABORT_cb_env.from = from
+  msg:init_encode(GPV_NO_ABORT_RESP, max_size)
+  -- do GPV for each path we received, don't abort on error
+  local rc, errcode, errmsg = transformer:getParameterValues(uuid, true, req, GPV_NO_ABORT_cb)
+  if not rc then
+    -- an error occurred: discard any data already queued, send an
+    -- error message to the client and stop the GPV_NO_ABORT
+    -- This should be a very rare case and signals an internal error. We need to keep the error path
+    -- since we can not guarantee success in all possible scenario's.
     msg:init_encode(ERROR, max_size)
     msg:encode(errcode, errmsg)
   end
@@ -340,6 +372,7 @@ local handlers = {
   [tags.UNSUBSCRIBE_REQ] = handle_UNSUB,
   [tags.GPL_REQ] = handle_GPL,
   [tags.GPC_REQ] = handle_GPC,
+  [tags.GPV_NO_ABORT_REQ] = handle_GPV_NO_ABORT,
   __index        = function()
     return handle_unknown
   end
