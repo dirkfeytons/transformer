@@ -21,13 +21,14 @@ uloop.init()
 local logger = require("transformer.logger")
 local uds = require("tch.socket.unix")
 local max_size = uds.MAX_DGRAM_SIZE
-local cloexec = uds.SOCK_CLOEXEC
+local bit = require("bit")
+local oredflags = bit.bor(uds.SOCK_NONBLOCK, uds.SOCK_CLOEXEC)
 local sk
 
 -- enclose option parsing code in separate block so the
 -- code can be GC'd after execution
 do
-  sk = uds.dgram(cloexec)
+  sk = uds.dgram(oredflags)
   sk:bind("transformer")
   -- read in the uci config and add it to defconfig
   local function do_config(defconfig)
@@ -110,12 +111,48 @@ local GPL_RESP = tags.GPL_RESP
 local GPC_RESP = tags.GPC_RESP
 local GPV_NO_ABORT_RESP = tags.GPV_NO_ABORT_RESP
 
+local tch_evloop = require("tch.socket.evloop")
+local tch_timerfd = require("tch.timerfd")
+
+local function sendto(sk, msg, from)
+  local ok, errmsg = sk:sendto(msg:retrieve_data(), from)
+  if not ok and errmsg == "WOULDBLOCK" then
+    -- The sending queue of our socket is full. Create an evloop so we
+    -- can wait for the socket to become writable again. To prevent blocking
+    -- indefinitely, we add a timer to the event loop that will timeout after
+    -- 15 seconds.
+    local evloop = tch_evloop.evloop()
+    if not evloop then
+      logger:critical("Failed to create an event loop during sending. Dropping datagram.")
+      return
+    end
+    local tfd = tch_timerfd.create()
+    local real_fd = tch_timerfd.fd(tfd)
+    -- Add the timer to the event loop.
+    evloop:add(real_fd, function()
+      errmsg = "No write callback possible after 15 seconds"
+      evloop:close()
+    end)
+    tch_timerfd.settime(tfd, 15)
+    -- Add the socket to the event loop with a callback for when it becomes writable again.
+    evloop:add(sk, nil, function()
+      ok, errmsg = sk:sendto(msg:retrieve_data(), from)
+      evloop:close()
+    end)
+    evloop:run()
+    tch_timerfd.close(real_fd)
+  end
+  if not ok then
+    logger:critical("Sendto %s failed: %s. Dropping datagram.", from, tostring(errmsg))
+  end
+end
+
 local function encode_wrapper(type, sk, from, ...)
   local success = msg:encode(...)
   if not success then
     -- The additional data does not fit in the dgram.
     -- Send what we have.
-    sk:sendto(msg:retrieve_data(), from)
+    sendto(sk, msg, from)
     msg:init_encode(type, max_size)
     success = msg:encode(...)
     if not success then
@@ -146,7 +183,7 @@ local function handle_GPV(sk, from, uuid, req)
   end
   -- send any data still left in the buffer with the 'last' flag set
   msg:mark_last()
-  sk:sendto(msg:retrieve_data(), from)
+  sendto(sk, msg, from)
 end
 
 local GPV_NO_ABORT_cb_env = {}
@@ -177,7 +214,7 @@ local function handle_GPV_NO_ABORT(sk, from, uuid, req)
   end
   -- send any data still left in the buffer with the 'last' flag set
   msg:mark_last()
-  sk:sendto(msg:retrieve_data(), from)
+  sendto(sk, msg, from)
 end
 
 local function handle_SPV(sk, from, uuid, req)
@@ -190,7 +227,7 @@ local function handle_SPV(sk, from, uuid, req)
     end
   end
   msg:mark_last()
-  sk:sendto(msg:retrieve_data(), from)
+  sendto(sk, msg, from)
 end
 
 local function handle_APPLY(uuid, req)
@@ -210,7 +247,7 @@ local function handle_ADD(sk, from, uuid, req)
     msg:encode(instance)
   end
   msg:mark_last()
-  sk:sendto(msg:retrieve_data(), from)
+  sendto(sk, msg, from)
 end
 
 local function handle_DEL(sk, from, uuid, req)
@@ -225,7 +262,7 @@ local function handle_DEL(sk, from, uuid, req)
     msg:init_encode(DEL_RESP, max_size)
   end
   msg:mark_last()
-  sk:sendto(msg:retrieve_data(), from)
+  sendto(sk, msg, from)
 end
 
 local GPN_cb_env = {}
@@ -249,7 +286,7 @@ local function handle_GPN(sk, from, uuid, req)
   end
   -- send any data still left in the buffer with the 'last' flag set
   msg:mark_last()
-  sk:sendto(msg:retrieve_data(), from)
+  sendto(sk, msg, from)
 end
 
 local function handle_RES(sk, from, uuid, req)
@@ -265,7 +302,7 @@ local function handle_RES(sk, from, uuid, req)
     msg:encode(path)
   end
   msg:mark_last()
-  sk:sendto(msg:retrieve_data(), from)
+  sendto(sk, msg, from)
 end
 
 local function handle_SUB(sk, from, uuid, req)
@@ -281,7 +318,7 @@ local function handle_SUB(sk, from, uuid, req)
     msg:encode(id, paths)
   end
   msg:mark_last()
-  sk:sendto(msg:retrieve_data(), from)
+  sendto(sk, msg, from)
 end
 
 local function handle_UNSUB(sk, from, uuid, req)
@@ -296,7 +333,7 @@ local function handle_UNSUB(sk, from, uuid, req)
     msg:init_encode(UNSUBSCRIBE_RESP, max_size)
   end
   msg:mark_last()
-  sk:sendto(msg:retrieve_data(), from)
+  sendto(sk, msg, from)
 end
 
 local GPL_cb_env = {}
@@ -324,7 +361,7 @@ local function handle_GPL(sk, from, uuid, req)
   end
   -- send any data still left in the buffer with the 'last' flag set
   msg:mark_last()
-  sk:sendto(msg:retrieve_data(), from)
+  sendto(sk, msg, from)
 end
 
 local function handle_GPC(sk, from, uuid, req)
@@ -349,14 +386,14 @@ local function handle_GPC(sk, from, uuid, req)
     msg:encode(errcode, errmsg)
   end
   msg:mark_last()
-  sk:sendto(msg:retrieve_data(), from)
+  sendto(sk, msg, from)
 end
 
 local function handle_unknown(sk, from)
   msg:init_encode(ERROR, max_size)
   msg:encode(fault.INTERNAL_ERROR, "unsupported tag")
   msg:mark_last()
-  sk:sendto(msg:retrieve_data(), from)
+  sendto(sk, msg, from)
 end
 
 -- all supported messages and their handling function
@@ -381,7 +418,7 @@ setmetatable(handlers, handlers)
 
 local function open_socket()
   while not sk do
-    sk = uds.dgram(cloexec)
+    sk = uds.dgram(oredflags)
     if not sk:bind("transformer") then
       -- if the socket can not be bound we have to retry it as transformer is
       -- not functional without it. But to avoid hogging resources we wait
@@ -425,7 +462,7 @@ local function sk_callback(fd, event)
   -- processing an incoming request (e.g. sending a response) it
   -- starts handling another request. For example: we're processing
   -- a Transformer request and as part of that processing a mapping
-  -- does a call on ubus. If a ubus event comes it at that moment
+  -- does a call on ubus. If a ubus event comes in at that moment
   -- then uloop starts happily processing that event. We don't want
   -- this unpredictable behavior; one reason is that as part of
   -- processing a ubus event we can make changes to the datamodel
