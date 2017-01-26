@@ -29,8 +29,8 @@ See LICENSE file for more details.
 local gsub, match, find = string.gsub, string.match, string.find
 local insert, remove = table.insert, table.remove
 local wrap, yield = coroutine.wrap, coroutine.yield
-local tonumber, assert, type, unpack, next, pairs =
-      tonumber, assert, type, unpack, next, pairs
+local tonumber, assert, type, unpack, next, pairs, ipairs =
+      tonumber, assert, type, unpack, next, pairs, ipairs
 local setmetatable = setmetatable
 
 local checkValue = require("transformer.typecheck").checkValue
@@ -533,7 +533,8 @@ local function output_all(it_state)
   local aliases = it_state.aliases
   -- synchronize will either succeed or throw an error.
   local iks = it_state.store:synchronize(mapping, keys, irefs)
-  for iref, key in pairs(iks) do
+  for _, iref in ipairs(iks) do
+    local key = iks[iref]
     insert(irefs, 1, iref)
     insert(keys, 1, key)
     insert(aliases, 1, "")

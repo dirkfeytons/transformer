@@ -28,7 +28,7 @@ local M = {}
 local require, tostring, pairs, ipairs, setmetatable, type, next =
       require, tostring, pairs, ipairs, setmetatable, type, next
 local format = string.format
-local concat = table.concat
+local concat, sort = table.concat, table.sort
 
 local db = require("transformer.persistency.db")
 local logger = require("transformer.logger").new('DB')
@@ -375,6 +375,23 @@ function Persistency:query_keys(tp_id, level)
   return result
 end
 
+--- Function to sort irefs that are instance numbers in
+-- the expected numerical order ("2" before "10").
+-- Disadvantage of this simple implementation is that irefs
+-- that are not just numbers (i.e. name-based irefs) will be
+-- sorted short names first and only names of the same length
+-- will be sorted alphabetically. But at least names will now
+-- be returned in a deterministic order.
+local function iref_sort(iref1, iref2)
+  local diff = #iref1 - #iref2
+  if diff == 0 then
+    -- strings of equal length are sorted alphabetically
+    return iref1 < iref2
+  end
+  -- shorter strings are sorted before longer ones
+  return (diff < 0)
+end
+
 -- the actual implementation of the sync
 local function sync_impl(db, tp_id, keys, ireferences_parent)
   local keymap = {}
@@ -419,6 +436,7 @@ local function sync_impl(db, tp_id, keys, ireferences_parent)
       new_entries[instance] = actual_key
     end
     if instance then
+      keymap[#keymap + 1] = instance
       keymap[instance] = actual_key
     end
   end
@@ -432,6 +450,7 @@ local function sync_impl(db, tp_id, keys, ireferences_parent)
     end
   end
 
+  sort(keymap, iref_sort)
   return keymap, new_entries
 end
 
@@ -441,8 +460,12 @@ end
 -- @param #table ireferences_parent The instance reference array for the parent object (this could
 --                       be empty)
 -- @return #table, #table A mapping of all instance references on this level to the
---                        given keys is the first return value. The second return value is
---                        a mapping of all NEW instance references on this level to their keys.
+--                        given keys is the first return value. Additionally the array
+--                        part of the table contains the irefs in a somewhat-natural
+--                        order. Note that this hybrid nature of the table implies you
+--                        can't just use pairs() to iterate it; you should use ipairs().
+--                        The second return value is a mapping of all NEW instance
+--                        references on this level to their keys.
 -- The database is updated to match this state.
 -- In case of a constraint violation the function returns nil and the database
 -- is not changed.

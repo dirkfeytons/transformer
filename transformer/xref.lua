@@ -45,7 +45,8 @@ local function update(store, maplist, index, irefs_parent, keys)
     -- synchronize will either succeed or throw an error
     local iks = store:synchronize(mapping, keys, irefs_parent)
     -- for all entries, map their children
-    for inb, key in pairs(iks) do
+    for _, inb in ipairs(iks) do
+      local key = iks[inb]
       insert(irefs_parent, 1, inb)
       insert(keys, 1, key)
       update(store, maplist, next_index, irefs_parent, keys)

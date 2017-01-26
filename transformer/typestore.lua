@@ -343,8 +343,11 @@ end
 -- @param #table parent_keys The keys of the parent for which we wish to synchronize.
 -- @param #table parent_ireferences The instance references of the parent for which
 --                                  we wish to synchronize.
--- @return #table, #table The mapping between the keys and instance references known for the
+-- @return #table, #table The mapping between the instance references and keys known for the
 --                        given mapping under the given parent is the first return value.
+--                        Additionally the array part of the table contains the irefs in a
+--                        somewhat-natural order. Note that this hybrid nature of the table
+--                        implies you can't just use pairs() to iterate it; you should use ipairs().
 --                        The second return value is a mapping between the new aliases and the
 --                        instance references for the given mapping under the given parent.
 function TypeStore:synchronize(mapping, parent_keys, parent_ireferences)
