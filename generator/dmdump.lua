@@ -22,6 +22,7 @@ local print, loadfile, setfenv, pcall, pairs, ipairs, tostring, type =
 local huge = math.huge
 local concat = table.concat
 
+local g_version = "1.0"  -- the current version of dmdump
 local g_objtypes = {}  -- array of all the objectType tables of mappings
 local g_numEntriesParams = {}  -- table with objtype paths as keys and array of paramnames as values
 local g_mappaths = {}  -- array of all directories to scan for mappings
@@ -42,9 +43,9 @@ Dump the supported datamodel of this device to a TR-106 compliant XML file.
 It will autodetect whether the datamodel is IGD or Device:2; any other
 datamodel is not supported (e.g. Device:1).
 
-Usage: %s [-h] [-d <datamodel> | -m <dir>] [-o <file>]
+Usage: %s [-h | -v] [-d <datamodel> | -m <dir>] [-o <file>]
 
-  -h        Print this help text.
+  -h        Print this help text and exit.
   -d <datamodel> The datamodel to dump; either "igd" or "device2". This
             option is a shortcut to automatically use suitable values
             for the -m option.
@@ -54,6 +55,7 @@ Usage: %s [-h] [-d <datamodel> | -m <dir>] [-o <file>]
             Default: %s
   -o <file> Write the output to this file.
             Default: %s
+  -v        Print the version (%s) and exit.
 
 Please report any errors or warnings that are printed.
 ]]
@@ -78,7 +80,7 @@ Please report any errors or warnings that are printed.
 
   local i = 1
   local function parse_h()
-    log(help, arg[0], g_default_dm, concat(datamodel_paths[g_default_dm], ",\n            "), g_output_file)
+    log(help, arg[0], g_default_dm, concat(datamodel_paths[g_default_dm], ",\n            "), g_output_file, g_version)
     os.exit(0)
   end
 
@@ -102,11 +104,17 @@ Please report any errors or warnings that are printed.
     g_output_file = arg[i] or parse_h()
   end
 
+  local function parse_v()
+    log("%s %s", arg[0], g_version)
+    os.exit(0)
+  end
+
   local args = setmetatable({
     ["-h"] = parse_h,
     ["-d"] = parse_d,
     ["-m"] = parse_m,
-    ["-o"] = parse_o
+    ["-o"] = parse_o,
+    ["-v"] = parse_v
   }, {
     __index = parse_h
   })
