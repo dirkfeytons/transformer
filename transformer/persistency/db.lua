@@ -46,21 +46,27 @@ It has the following fields:
   * ireferences : a string representing the instance references (these can be numbers or strings)
   * key : a string representing the key of the object
   * parent : the id of the parent object
+  * alias : a string representing the alias of the object
 
 The format and content of ireferences and key is of no concern to the
 db, they are always strings.
 
-The combination (tp_id, ireferences) must be unique and also the combination
-(tp_id, key) must be unique.
+The combination (tp_id, ireferences) must be unique, the combination
+(tp_id, key) must be unique and the combination (tp_id, parent, alias) must be unique.
 
 Access functions for the Objects table:
   * insertObject
   * deleteObject
   * getObject
   * getObjectByKey
+  * getObjectByAlias
   * getChildren
   * getSiblings
   * getParents
+  * getAlias
+  * getAliases
+  * setAliasForId
+  * setAliasForKey
 
 Table: Counters
 ---------------
@@ -574,8 +580,8 @@ function db:insertTypePath(tp_chunks)
     chunk_id = insertChunk(self, tp_chunks[index], chunk_id)
     index = index - 1
   end
-  if chunk_id == 0 then
-    check(false, "No typepath to insert")
+  if not chunk_id or chunk_id == 0 then
+    error("No typepath to insert")
   end
   return chunk_id
 end
@@ -656,13 +662,34 @@ function db:getObjectByKey(tp_id, key)
   return row
 end
 
+--- Fetch the row from the 'objects' table with the given typepath ID and alias.
+-- @param #number tp_id The database ID of a type path in the tree.
+-- @param #string alias The alias associated with a certain object instance.
+-- @return #table A table representation of an object or nil if not found
+-- There will be at most one such row due to database constraints.
+--
+-- For the table representation, see db:getObject
+function db:getObjectByAlias(tp_id, alias)
+  local row = check(query(
+    self,
+    [[
+      SELECT id, tp_id, ireferences, key, parent
+      FROM objects
+      WHERE tp_id=:tp_id AND alias=:alias
+    ]],
+    false,
+    {tp_id=tp_id, alias=alias}
+  ))
+  return row
+end
+
 --- retrieve the Alias info
--- @param tp_id #number tp_id The database id of the type path in the tree
+-- @param #number tp_id The database id of the type path in the tree
 -- @param #string key The key associated with the instance
 -- @return #table A table with the id, parent, ireferences and alias values or nil if there
 --   is no such row. There is at most one such row due to database constraints
 function db:getAlias(tp_id, key)
-  return check(query(
+  local row = check(query(
     self,
     [[
       SELECT id, parent, ireferences, alias
@@ -672,15 +699,16 @@ function db:getAlias(tp_id, key)
     false,
     {tp_id=tp_id, key=key}
   ))
+  return row
 end
 
 --- retrieve all aliases for a type/parent combo
--- @param tp_id #number The dabase id of the typepath in the tree
--- @param parent #number THe database id of the parent object
+-- @param #number tp_id The database id of the typepath in the tree
+-- @param #number parent The database id of the parent object
 -- @return #table a list of rows with the id, ireferences and alias of all the
 --   children of parent with the given type
 function db:getAliases(tp_id, parent)
-  return check(query(
+  local rows = check(query(
     self,
     [[
       SELECT alias
@@ -692,12 +720,15 @@ function db:getAliases(tp_id, parent)
     {tp_id=tp_id, parent=parent},
     {}
   ))
+  return rows
 end
 
---- set the alias value for an object
--- @param id #number the id of the object
--- @param alias #string the new alias value
-function db:setAlias(id, alias)
+--- Set the alias value for an object with the given database ID
+-- @param #number id The id of the object in the database
+-- @param #string alias The new alias value
+-- @return #boolean True if everything succeeded, false if a duplicate alias was given.
+-- This function can raise an error when a database error occurs.
+function db:setAliasForId(id, alias)
   local ok, e = query(
     self,
     [[
@@ -707,6 +738,33 @@ function db:setAlias(id, alias)
     ]],
     false,
     {id=id, alias=alias}
+  )
+  if not ok then
+    if e.err==sqlite.CONSTRAINT then
+      return false, "duplicate value"
+    else
+      check(false, e)
+    end
+  end
+  return true
+end
+
+--- Set the alias value for an object with the given typepath ID and given key
+-- @param #number tp_id The database id of the type path that needs to be updated
+-- @param #string key The key of the object that needs to be updated
+-- @param #string alias The new alias value
+-- @return #boolean True if everything succeeded, false if a duplicate alias was given.
+-- This function can raise an error when a database error occurs.
+function db:setAliasForKey(tp_id, key, alias)
+  local ok, e = query(
+    self,
+    [[
+      UPDATE objects
+      SET alias=:alias
+      WHERE tp_id=:tp_id AND key=:key
+    ]],
+    false,
+    {tp_id=tp_id, key=key, alias=alias}
   )
   if not ok then
     if e.err==sqlite.CONSTRAINT then

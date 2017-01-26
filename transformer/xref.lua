@@ -89,7 +89,7 @@ local function resolve_impl(store, typepath, key, no_sync)
   else
     -- No multi-instance mappings in the path. Check for optional single instance.
     -- The getkeys() function throws an error if one doesn't exist.
-    store:getkeys(maplist, empty, no_sync)
+    store:getkeys(maplist, empty, empty, no_sync)
     path = typepath
   end
 
@@ -106,7 +106,7 @@ local function resolve_impl(store, typepath, key, no_sync)
   if inumbers then
     -- Check if there are optional single instance mappings
     -- below the last multi instance mapping in the path.
-    store:getkeys(maplist, inumbers, no_sync)
+    store:getkeys(maplist, inumbers, empty, no_sync)
     -- generate full path
     path = typePathToObjPath(typepath, inumbers)
   end
@@ -203,14 +203,14 @@ function M.tokey(store, objectpath, typepath, ...)
 
   -- Retrieve all keys from DB and check any optional single instances exist.
   local key
-  local rc, keys = pcall(store.getkeys, store, maplist, inumbers, true)
+  local rc, keys = pcall(store.getkeys, store, maplist, inumbers, empty, true)
   if rc then
     -- Everything checked out OK; our key is the first one in the list.
     -- (keys are returned in reverse order)
     key = keys[1]
   else
     -- Some instance could not be found; try again but allow to sync.
-    rc, keys = pcall(store.getkeys, store, maplist, inumbers)
+    rc, keys = pcall(store.getkeys, store, maplist, inumbers, empty)
     if rc then
       key = keys[1]
     end

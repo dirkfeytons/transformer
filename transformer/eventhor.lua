@@ -113,7 +113,7 @@ function Eventhor:addSubscription(uuid, path, addr, subscr_mask, options)
   end
   -- Verify we have a mapping for the path.
   local objpath, param = divideInPathParam(path)
-  local typepath, irefs = objectPathToTypepath(objpath)
+  local typepath = objectPathToTypepath(objpath)
   local mapping = self.store:get_mapping_incomplete(typepath)
   if not mapping or (param ~= "" and not self.store:mappingContainsParameter(mapping, param)) then
     fault.InvalidName("Invalid path %s", path)

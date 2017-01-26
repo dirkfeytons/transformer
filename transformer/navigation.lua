@@ -94,7 +94,7 @@ setmetatable(tracker, mt_outer)
 
 --- Add a path and action to track.
 -- @param #table mapping The mapping on which the operation is performed.
--- @param #string path The path on which the operation is performed.
+-- @param #string path The path on which the operation is performed. This should not contain any aliases.
 -- @param #string operation The operation that is being performed.
 local function track(mapping, path, operation)
   logger:debug("tracking %s on %s: %s", path, mapping.objectType.name, operation)
@@ -256,7 +256,7 @@ function Param:set(value)
   else
     fault.InternalError("unknown %s for param '%s' (%s)", "setter", paramname, type_set)
   end
-  track(mapping, self.objpath..paramname, "set")
+  track(mapping, typePathToObjPath(fullPath, self.irefs), "set")
   return true
 end
 
@@ -305,7 +305,7 @@ function Object:delete()
     fault.InternalError("delete() failed: %s", errmsg or "-")
   end
 
-  track(mapping, self.objpath, "delete")
+  track(mapping, typePathToObjPath(objtype.name, self.irefs), "delete")
   -- delete worked, delete from persistency.
   -- This will only take effect when commit is called.
   self.store.persistency:delKey(mapping.tp_id, self.irefs)
@@ -429,6 +429,11 @@ function Objtype:add(name)
   -- success
   -- addKey will either succeed or throw an error
   local instance = self.store.persistency:addKey(mapping.tp_id, self.irefs, svalue)
+  if mapping.objectType.aliasParameter then
+    -- Add an alias for the new instance (if needed)
+    local known_aliases = self.store.persistency:getKnownAliases(mapping.tp_id, self.irefs)
+    self.store:generateAlias(mapping, known_aliases, instance, svalue, unpack(self.keys))
+  end
   insert(self.irefs, 1, instance)
   local objPath = typePathToObjPath(objtype.name, self.irefs)
   remove(self.irefs, 1)
@@ -463,7 +468,12 @@ function Objtype:delete()
     end
 
     -- delete worked
-    track(mapping, self.objpath, "deleteall")
+    insert(self.irefs, 1, "dummy_iref") -- Add a dummy to make typePathToObjPath work
+    local objpath = typePathToObjPath(objtype.name, self.irefs)
+    remove(self.irefs, 1)
+    objpath = objpath:match("^(.*)%..dummy_iref$")
+    track(mapping, objpath, "deleteall")
+
     local persistency = self.store.persistency
     -- TODO delete from persistency, implement recursive delete
     logger:critical("deleteall on %s: recursive delete not implemented", objtype.name)
@@ -520,15 +530,18 @@ local function output_all(it_state)
   local typepath = mapping.objectType.name
   local keys = it_state.keys
   local irefs = it_state.irefs
+  local aliases = it_state.aliases
   -- synchronize will either succeed or throw an error.
   local iks = it_state.store:synchronize(mapping, keys, irefs)
   for iref, key in pairs(iks) do
     insert(irefs, 1, iref)
     insert(keys, 1, key)
-    it_state.objpath = typePathToObjPath(typepath, irefs)
+    insert(aliases, 1, "")
+    it_state.objpath = typePathToObjPath(typepath, irefs, aliases)
     output_instance(it_state)
     remove(irefs, 1)
     remove(keys, 1)
+    remove(aliases, 1)
     it_state.mapping = mapping
   end
 end
@@ -560,7 +573,7 @@ output_instance = function(it_state)
     it_state.mapping = childmapping
     -- (optional) single instance objtype?
     if objtype.maxEntries == 1 then
-      it_state.objpath = typePathToObjPath(objtype.name, it_state.irefs)
+      it_state.objpath = typePathToObjPath(objtype.name, it_state.irefs, it_state.aliases)
       output_instance(it_state)
     else
       local lastname = match(objtype.name, "%.([^%.]+%.)[^%.]+%.$")
@@ -706,12 +719,16 @@ local function navigate(store, path, action, level)
   -- the path is exact if a parameter name was supplied.
   local is_exact_path = (0 ~= #paramname)
 
-  -- Parse out the instance numbers and names from the path.
+  -- Parse out the instance numbers, aliases and names from the path.
   -- They are stored in reverse order.
-  local typepath, irefs = objectPathToTypepath(objpath)
+  local typepath, irefs, aliases = objectPathToTypepath(objpath)
+  -- irefs at this point contains aliases as well. These need to be converted to
+  -- proper instance references.
+  local mappings = store:collectMappings(typepath)
+  irefs = store:convertAliasesToIrefs(mappings, aliases, irefs)
 
   -- Now resolve the instance numbers to keys.
-  local keys = store:getkeys(store:collectMappings(typepath), irefs)
+  local keys, irefs = store:getkeys(mappings, irefs, aliases)
   assert(#irefs == #keys)
 
   -- This is guaranteed to succeed after getkeys.
@@ -723,6 +740,7 @@ local function navigate(store, path, action, level)
     mapping = mapping,
     paramname = paramname,
     irefs = irefs,
+    aliases = aliases,
     keys = keys,
     objpath = objpath,
     level = level,

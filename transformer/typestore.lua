@@ -10,16 +10,16 @@ Clear BSD License (http://directory.fsf.org/wiki/License:ClearBSD)
 See LICENSE file for more details.
 ]]
 
-local format,        gmatch,        find =
-      string.format, string.gmatch, string.find
+local format,        gmatch,        find,        sub =
+      string.format, string.gmatch, string.find, string.sub
 local insert, concat = table.insert, table.concat
 local floor = math.floor
-local error, unpack, require, setmetatable, assert, ipairs =
-      error, unpack, require, setmetatable, assert, ipairs
+local error, unpack, require, setmetatable, assert, ipairs, pairs, next, type =
+      error, unpack, require, setmetatable, assert, ipairs, pairs, next, type
 local pcall = pcall
 local fault = require("transformer.fault")
 local nav = require("transformer.navigation")
-local alias = require("transformer.alias")
+local alias_module = require("transformer.alias")
 local pathFinder = require("transformer.pathfinder")
 local logger = require("transformer.logger")
 local xpcall = require("tch.xpcall")
@@ -278,7 +278,7 @@ end
 -- call persistency.sync but improve the error msg by prepending the mapping path
 local function db_sync(self, mapping, entries, parent_ireferences)
   local persistency = self.persistency
-  local ok, keymap = pcall(persistency.sync, persistency, mapping.tp_id, entries, parent_ireferences)
+  local ok, keymap, new_keys = pcall(persistency.sync, persistency, mapping.tp_id, entries, parent_ireferences)
   if not ok then
     -- include path in error msg
     if type(keymap)=='table' then
@@ -287,7 +287,55 @@ local function db_sync(self, mapping, entries, parent_ireferences)
     -- reraise
     error(keymap)
   end
-  return keymap
+  return keymap, new_keys
+end
+
+--- Helper function to ensure we generate a unique alias.
+-- @param #string alias The new alias we wish to use.
+-- @param #table known_aliases A table of known aliases, with the aliases as keys.
+-- @return #string The passed in alias if it was available, a modified version of the alias otherwise.
+local function make_alias_unique(alias, known_aliases)
+  if #alias > 54 then
+    -- We only use the first 54 characters here to avoid breaking the 64 character limit of an alias.
+    -- This leaves 10 characters to ensure uniqueness.
+    alias = sub(alias, 1, 54)
+  end
+  known_aliases = known_aliases or {}
+  if known_aliases[alias] then
+    -- alias was not unique, start appending numbers
+    local guess
+    local n=0
+    repeat
+      n = n+1
+      guess = alias..n
+    until not known_aliases[guess]
+    alias = guess
+  end
+  return alias
+end
+
+--- Function to generate a new alias for the given mapping and key.
+-- @param #table mapping The mapping we need to generate an alias for.
+-- @param #table known_aliases A table of known aliases.
+-- @param #string iref The instance reference to be used by the object with the given key.
+-- @param #string key The key of the object for which to generate an alias.
+-- @param #string parentkey The optional parentkey/grandparentkey/... of the object.
+-- @return #string A new alias for the given mapping and key.
+function TypeStore:generateAlias(mapping, known_aliases, iref, key, ...)
+  -- First we generate a base for the alias
+  local base
+  if mapping.aliasDefault then
+    base = nav.get_parameter_value(mapping, mapping.aliasDefault, key, ...)
+  else
+    local name = mapping.objectType.name:gsub("%.{i}%.$", "."):match("([^%.]+)%.$") or ""
+    local index = iref or ""
+    base = name.."-"..index
+  end
+  -- Then we ensure it's unique by checking it against the known aliases.
+  local alias = make_alias_unique("cpe-"..base, known_aliases)
+  -- Finally we persist it.
+  self.persistency._db:setAliasForKey(mapping.tp_id, key, alias)
+  return alias
 end
 
 --- Synchronize the given mapping with our database.
@@ -295,14 +343,26 @@ end
 -- @param #table parent_keys The keys of the parent for which we wish to synchronize.
 -- @param #table parent_ireferences The instance references of the parent for which
 --                                  we wish to synchronize.
--- @return #table The mapping between the keys and instance references known for the
---                given mapping under the given parent.
+-- @return #table, #table The mapping between the keys and instance references known for the
+--                        given mapping under the given parent is the first return value.
+--                        The second return value is a mapping between the new aliases and the
+--                        instance references for the given mapping under the given parent.
 function TypeStore:synchronize(mapping, parent_keys, parent_ireferences)
-  local keymap
+  local keymap, new_keys, new_aliases
+  new_aliases = {}
   local parent_irefs_string = concat(parent_ireferences, ".")
   if not mapping._entries or not mapping._entries[parent_irefs_string] then
     local entries = get_entries(mapping, parent_keys)
-    keymap = db_sync(self, mapping, entries, parent_ireferences)
+    keymap, new_keys = db_sync(self, mapping, entries, parent_ireferences)
+    if mapping.objectType.aliasParameter and new_keys and next(new_keys) then
+      -- First retrieve the parent DB object, so we can check the generated aliases for uniqueness.
+      local known_aliases = self.persistency:getKnownAliases(mapping.tp_id, parent_ireferences)
+      for iref, key in pairs(new_keys) do
+        local alias = self:generateAlias(mapping, known_aliases, iref, key, unpack(parent_keys))
+        known_aliases[alias] = true
+        new_aliases[alias] = iref
+      end
+    end
     if not mapping._entries then
       mapping._entries = {}
     end
@@ -313,7 +373,7 @@ function TypeStore:synchronize(mapping, parent_keys, parent_ireferences)
     -- Retrieve cached keymap
     keymap = mapping._entries[parent_irefs_string]
   end
-  return keymap
+  return keymap, new_aliases
 end
 
 --- Check if the given mapping exists for the given parent keys.
@@ -345,13 +405,16 @@ end
 -- the corresponding instance number. If the list of mappings contain optional
 -- single instance types it will check if the instance exists for the given
 -- ancestors.
--- @param mappings An array of mappings for which we need to find all the keys.
--- @param irefs The array of all the instance references in reverse order.
+-- @param #table mappings An array of mappings for which we need to find all the keys.
+-- @param #table irefs The array of all the instance references in reverse order.
+-- @param #table aliases The array of all aliases in reverse order.
 -- @param no_sync Boolean indicating the implementation shouldn't sync
 --                multi-instance mappings.
--- @return The array with all the keys in the same order as the instance
---         references array.
-function TypeStore:getkeys(mappings, irefs, no_sync)
+-- @return #table, #table The array with all the keys in the same order as the instance
+--                        references array is the first return value. The second return
+--                        value is the instance references array with all aliases replaced
+--                        by the actual instance references.
+function TypeStore:getkeys(mappings, irefs, aliases, no_sync)
   -- For each multi instance type in 'mappings'
   -- we must first sync with the mappers and validate against the
   -- persistency store.
@@ -362,6 +425,7 @@ function TypeStore:getkeys(mappings, irefs, no_sync)
     if self:isMultiInstanceMapping(mapping) then
       local key
       if no_sync then
+        -- No sync means no aliases
         count = count - 1
         local current_irefs = { unpack(irefs, count) }
         key = self.persistency:getKey(mapping.tp_id, current_irefs)
@@ -370,7 +434,14 @@ function TypeStore:getkeys(mappings, irefs, no_sync)
         -- synchronize will either succeed or throw an error.
         local parent_irefs = { unpack(irefs, count) }
         count = count - 1
-        local iks = self:synchronize(mapping, keys, parent_irefs)
+        local iks, new_aliases = self:synchronize(mapping, keys, parent_irefs)
+        if aliases and aliases[count] == irefs[count] then
+          if not new_aliases[aliases[count]] then
+            -- We have an alias we can't translate to an instance number.
+            fault.InvalidName("invalid instance")
+          end
+          irefs[count] = new_aliases[aliases[count]]
+        end
         key = iks[irefs[count]]
       end
       if not key then
@@ -387,7 +458,34 @@ function TypeStore:getkeys(mappings, irefs, no_sync)
     end
     -- Mandatory single instances always exist and have no key.
   end
-  return keys
+  return keys, irefs
+end
+
+--- Convert a list of aliases to their corresponding instance references.
+-- @param #table mappings An array of mappings for which we need to translate find all the aliases.
+-- @param #table aliases An array of the aliases we need to translate.
+-- @param #table irefs An array of instance references we already know. This array contains aliases in the spots
+--                     we need to convert.
+-- @return #table The given array of instance references, completed as much as possible by replacing all aliases with
+--                the corresponding instance references. There is however no guarantee that all aliases will be replaced,
+--                as a synchronization might be required.
+-- @note The length of the given aliases array needs to be the same as the length of the given instance references array.
+function TypeStore:convertAliasesToIrefs(mappings, aliases, irefs)
+  local count = #irefs + 1 -- The irefs are reversed, so start counting backwards.
+  for _, mapping in ipairs(mappings) do
+    if self:isMultiInstanceMapping(mapping) then
+      count = count - 1
+      if aliases[count] == irefs[count] then
+        -- We received an alias on this level, retrieve the associated iref.
+        local iref = self.persistency:getIreferenceByAlias(mapping.tp_id, aliases[count])
+        if iref then
+          -- Only replace the alias if we found an alias, don't create a hole.
+          irefs[count] = iref
+        end
+      end
+    end
+  end
+  return irefs
 end
 
 --- Close down a store.
@@ -463,7 +561,6 @@ function TypeStore:setClientUUID(uuid)
   self._client_uuid = uuid
 end
 
-
 function TypeStore:registerEventhor(eventhor)
   self.eventhor = eventhor
 end
@@ -491,7 +588,7 @@ local M = {
       inTransaction = false,
       entries_cache = {}, -- Cache for the entries function in 1 transaction
     }
-    self.alias = alias.new(self)
+    self.alias = alias_module.new(self)
     return setmetatable(self, TypeStore)
   end
 }

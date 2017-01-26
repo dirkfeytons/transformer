@@ -220,6 +220,37 @@ function Persistency:getIreferences(tp_id, key)
   end
 end
 
+--- Get the ireferences of the given typepath ID and alias.
+-- @param #number tp_id The database ID of the full typepath of the object.
+-- @param #string key The alias of the object.
+-- @return #table The last ireference (lowest in the path, this is the one that corresponds to the given alias)
+--                stored in the database if it exists or nil.
+function Persistency:getIreferenceByAlias(tp_id, alias)
+  local obj = self._db:getObjectByAlias(tp_id, alias)
+  if obj then
+    local irefs = ireferences_from_string(obj.ireferences)
+    if #irefs > 0 then
+      return irefs[1]
+    end
+  end
+end
+
+--- Retrieve all known aliases for given typepath ID and parent ireferences.
+-- @param #number tp_id The database id of the typepath in the tree
+-- @param #table ireferences_parent The ireferences of the parent object
+-- @return #table A table of known aliases with the aliases as keys.
+function Persistency:getKnownAliases(tp_id, ireferences_parent)
+  local iref = string_from_ireferences(ireferences_parent)
+  local db = self._db
+  local parent = getParentOfMulti(db, tp_id, iref)
+  local known_aliases_db = db:getAliases(tp_id, parent.id)
+  local known_aliases = {}
+  for _, entry in pairs(known_aliases_db) do
+    known_aliases[entry.alias] = true
+  end
+  return known_aliases
+end
+
 --- Add an entry to the database.
 -- @param #number tp_id The database ID of the typepath of the object to add.
 -- @param #table ireferences_parent The instance references of the parent object.
@@ -347,6 +378,7 @@ end
 -- the actual implementation of the sync
 local function sync_impl(db, tp_id, keys, ireferences_parent)
   local keymap = {}
+  local new_entries = {}
   local iref = string_from_ireferences(ireferences_parent)
 
   local parent, child = getParentOfMulti(db, tp_id, iref)
@@ -384,6 +416,7 @@ local function sync_impl(db, tp_id, keys, ireferences_parent)
     else
       -- addInstance will either succeed or throw an error.
       instance = addInstance(db, child, iref, tp_id, key, parent.id, keysTuples)
+      new_entries[instance] = actual_key
     end
     if instance then
       keymap[instance] = actual_key
@@ -399,7 +432,7 @@ local function sync_impl(db, tp_id, keys, ireferences_parent)
     end
   end
 
-  return keymap
+  return keymap, new_entries
 end
 
 --- Synchronize the database for the given typepath ID.
@@ -407,22 +440,23 @@ end
 -- @param #table keys A list of keys for all lower layer objects.
 -- @param #table ireferences_parent The instance reference array for the parent object (this could
 --                       be empty)
--- @return #table A mapping of all instance numbers on this level to the
---                given keys.
+-- @return #table, #table A mapping of all instance references on this level to the
+--                        given keys is the first return value. The second return value is
+--                        a mapping of all NEW instance references on this level to their keys.
 -- The database is updated to match this state.
--- in case of a constraint violation the function returns nil and the database
+-- In case of a constraint violation the function returns nil and the database
 -- is not changed.
 function Persistency:sync(tp_id, keys, ireferences_parent)
   local db = self._db
-  local result
+  local keymap, new_keys
 
   -- wrap the sync_impl call in a transaction to handle the error case.
   -- We don't know if this is the outer transaction, so create an inner one
   -- to be safe.
   local savepoint = db:startTransaction(false)
   local ok
-  ok, result = pcall(sync_impl, db, tp_id, keys, ireferences_parent)
-  local commit = ok and result
+  ok, keymap, new_keys = pcall(sync_impl, db, tp_id, keys, ireferences_parent)
+  local commit = ok and keymap
   if commit then
     db:commitTransaction(savepoint)
   else
@@ -430,9 +464,9 @@ function Persistency:sync(tp_id, keys, ireferences_parent)
   end
   if not ok then
     -- propagate error
-    error(result)
+    error(keymap)
   end
-  return result
+  return keymap, new_keys
 end
 
 --- Split the given typepath in typepath chunks.

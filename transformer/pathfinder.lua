@@ -17,6 +17,8 @@ local insert = table.insert
 
 -- The placeholder that indicates transformer needs to operate on it.
 local transformer_placeholder = "{i}"
+-- The placeholder that indicates transformer needs to operate on it and treat it as an alias.
+local transformer_alias_placeholder = "["
 -- The placeholder that indicates transformer should not touch it.
 local passthrough_placeholder = "@"
 
@@ -110,9 +112,13 @@ function PathFinder.divideInPathParam(path)
   return match(path, "(.*%.)([^%.]*)$")
 end
 
--- Local table of instance references. Used in iref_parse and iref_sub.
+-- Local array of instance references. Used in iref_parse and iref_sub.
 -- These functions only work correctly if this variable is initialized correctly.
-local irefs={}
+local irefs = {}
+-- Local array of aliases. Used in iref_parse and iref_sub.
+-- These functions only work correctly if this variable is initialized correctly.
+local aliases = {}
+local no_alias = ""
 
 --- Method used to parse object path fragments.
 -- If the fragment indicates it's a pass-through or a transformer part,
@@ -124,9 +130,19 @@ local function iref_parse(part)
   --if isPassThrough(sub(part,1,1)) then
   if sub(part,1,1) == passthrough_placeholder then
     insert(irefs, 1, sub(part,2))
+    -- Insert dummy alias to keep the array in line with irefs.
+    insert(aliases, 1, no_alias)
     return passthrough_placeholder
+  elseif sub(part,1,1) == transformer_alias_placeholder then
+    -- Since we don't know the real ireference, insert alias to keep
+    -- the array in line with aliases.
+    insert(irefs, 1, sub(part,2, #part-1))
+    insert(aliases, 1, irefs[1])
+    return transformer_placeholder
   elseif match(part,"^%d+$") then
     insert(irefs, 1, part)
+    -- Insert dummy alias to keep the array in line with irefs.
+    insert(aliases, 1, no_alias)
     return transformer_placeholder
   end
   return part
@@ -134,47 +150,59 @@ end
 
 --- Get the type path for a given object path.
 -- @param #string objectpath The given object path.
--- @return #string, #table The type path (ie all instance numbers/names
+-- @return #string, #table, #table The type path (ie all instance numbers/names/aliases
 --                         are replaced with {i}/@) is returned as first
---                         argument and the corresponding instance references
---                         as second argument.
+--                         argument, the corresponding instance references
+--                         as second argument and the corresponding aliases as third
+--                         argument. The instance references array will also contain the
+--                         aliases if present.
 function PathFinder.objectPathToTypepath(objectpath)
   irefs = {}
+  aliases = {}
   -- Parse out the instance references from the path.
   local typepath = gsub(objectpath, "([^%.]+)", iref_parse)
-  return typepath, irefs
+  return typepath, irefs, aliases
 end
 
 local count
 
 --- Method used to parse type path fragments.
 -- If the fragment indicates it's a pass-through or a transformer placeholder,
--- it will be replaced by the corresponding instance reference.
+-- it will be replaced by the corresponding instance reference or alias.
 -- @param #string part The fragment we need to inspect.
--- @return #string An instance reference if the fragment requires it, otherwise the
+-- @return #string An instance reference or alias if the fragment requires it, otherwise the
 --                 fragment itself is returned.
 local function iref_sub(part)
   --if PathFinder.isMultiInstance(part) then
   if (part == transformer_placeholder) or (part == passthrough_placeholder) then
-    local iref = irefs[count]
-    if part == passthrough_placeholder then
-      iref = passthrough_placeholder..iref
+    if aliases[count] and aliases[count] ~= no_alias then
+      local alias = aliases[count]
+      alias = transformer_alias_placeholder .. alias .. "]"
+      count = count - 1
+      return alias
+    else
+      local iref = irefs[count]
+      if part == passthrough_placeholder then
+        iref = passthrough_placeholder..iref
+      end
+      count = count - 1
+      return iref
     end
-    count = count - 1
-    return iref
   end
   return part
 end
 
---- Replace placeholders with real instance references,
+--- Replace placeholders with real instance references or aliases,
 -- transforming a type path into a object path.
 -- @param #string typepath The path of the object (with placeholders)
--- @param #table ireferences The list of instance references.
--- @return #string The type path with all placeholders replaced by the given references.
--- Note: the length of the irefs list must equal the number of placeholders
+-- @param #table ireferences The array of instance references.
+-- @param #table alias The optional array of aliases. These will get precedence over instance references.
+-- @return #string The type path with all placeholders replaced by the given references and aliases.
+-- Note: the length of the irefs array must equal the number of placeholders
 --   in typepath.
-function PathFinder.typePathToObjPath(typepath, ireferences)
+function PathFinder.typePathToObjPath(typepath, ireferences, alias)
   irefs = ireferences
+  aliases = alias or {}
   count = #irefs
   return gsub(typepath, "([^%.]+)", iref_sub)
 end
