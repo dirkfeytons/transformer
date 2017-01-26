@@ -251,7 +251,7 @@ function Param:set(value)
     elseif not svalue and errmsg then
       -- setter returned nil + error msg
       -- note that we allow that the setter returns nothing at all
-      fault.InternalError("set() failed: %s", errmsg)
+      fault.InvalidValue("set() failed: %s", errmsg)
     end
   else
     fault.InternalError("unknown %s for param '%s' (%s)", "setter", paramname, type_set)
