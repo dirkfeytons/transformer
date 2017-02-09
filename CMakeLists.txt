@@ -15,15 +15,26 @@ set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DENABLE_DEBUG")
 include_directories(lib/api/ ${LIBLUA_INCLUDE_DIR})
 
 # lasync
-add_library(lasync MODULE lib/src/tch_async/tch_async.c)
+set(ASYNC_SOURCES )
+set(SOURCES
+  tch_async.c
+  async.c
+  execute.c
+)
+foreach(src ${SOURCES})
+  set(ASYNC_SOURCES ${ASYNC_SOURCES} lib/src/tch_async/${src})
+endforeach(src)
+add_library(lasync MODULE ${ASYNC_SOURCES})
 target_link_libraries(lasync ${CMAKE_THREAD_LIBS_INIT})
 set_target_properties(lasync PROPERTIES PREFIX "")
+set_source_files_properties(${ASYNC_SOURCES}
+  PROPERTIES COMPILE_FLAGS "-fvisibility=hidden")
 install(TARGETS lasync
         LIBRARY DESTINATION lib/lua)
 
 # syslog
 add_library(syslog MODULE lib/src/syslog/lsyslog.c)
-set_target_properties(syslog PROPERTIES PREFIX "")
+set_target_properties(syslog PROPERTIES  PREFIX "")
 install(TARGETS syslog
         LIBRARY DESTINATION lib/lua)
 
