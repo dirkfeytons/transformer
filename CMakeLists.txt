@@ -32,12 +32,6 @@ set_source_files_properties(${ASYNC_SOURCES}
 install(TARGETS lasync
         LIBRARY DESTINATION lib/lua)
 
-# syslog
-add_library(syslog MODULE lib/src/syslog/lsyslog.c)
-set_target_properties(syslog PROPERTIES  PREFIX "")
-install(TARGETS syslog
-        LIBRARY DESTINATION lib/lua)
-
 # libtransformer       
 add_library(transformer SHARED lib/src/transformer/libtransformer.c)
 set_target_properties(transformer PROPERTIES

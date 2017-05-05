@@ -12,12 +12,12 @@ See LICENSE file for more details.
 
 ---
 -- Logging module.
--- 
+--
 -- Intended way of using:
 -- - Load it using require():
 --     local logger = require("transformer.logger")
 -- - Initialize using logger.init(). Pass the desired global log level (1 to 6)
---   and whether you want logs to also be sent to stderr (next to syslog).
+--   and whether you want logs to also be sent to stderr.
 -- - Create a logging object that has optionally a name and optionally a
 --   specific log level. On that object you have a log function for each log
 --   level and a function to change the log level. You can also clear the
@@ -39,17 +39,17 @@ See LICENSE file for more details.
 local setmetatable = setmetatable
 local format = string.format
 
-local syslog = require("syslog")
+local posix = require("tch.posix")
 
 -- Our logger module has 6 log levels, ranging from 1 to 6.
--- To each level corresponds a syslog logging function.
-local syslog_functions = {
-  syslog.critical,
-  syslog.error,
-  syslog.warning,
-  syslog.notice,
-  syslog.info,
-  syslog.debug
+-- To each level corresponds a posix constant priorities.
+local posix_priorities = {
+  posix.LOG_CRIT,
+  posix.LOG_ERR,
+  posix.LOG_WARNING,
+  posix.LOG_NOTICE,
+  posix.LOG_INFO,
+  posix.LOG_DEBUG,
 }
 
 -- module table with default global log level
@@ -69,7 +69,7 @@ local function log(logger, log_level, fmt, ...)
     else
       msg = format(fmt, ...)
     end
-    syslog_functions[log_level](msg)
+    posix.syslog(posix_priorities[log_level], msg)
   end
 end
 
@@ -80,27 +80,27 @@ end
 
 --- Log an error message.
 function logger:error(fmt, ...)
-  log(self, 2, fmt, ...) 
+  log(self, 2, fmt, ...)
 end
 
 --- Log a warning message.
 function logger:warning(fmt, ...)
-  log(self, 3, fmt, ...) 
+  log(self, 3, fmt, ...)
 end
 
 --- Log a notice message.
 function logger:notice(fmt, ...)
-  log(self, 4, fmt, ...) 
+  log(self, 4, fmt, ...)
 end
 
 --- Log an informational message.
 function logger:info(fmt, ...)
-  log(self, 5, fmt, ...) 
+  log(self, 5, fmt, ...)
 end
 
 --- Log a debug message.
 function logger:debug(fmt, ...)
-  log(self, 6, fmt, ...) 
+  log(self, 6, fmt, ...)
 end
 
 --- Change or clear the log level of this logger.
@@ -117,7 +117,6 @@ function logger:set_log_level(log_level)
     self.log_level = log_level
   end
 end
-
 
 --- Create a named (optional) logger with its own log level.
 -- @param modname Optional name of the module using the logger. It will
@@ -147,8 +146,8 @@ setmetatable(M, logger)
 --                  the default level will be used.
 -- @param log_stderr Boolean indicating whether to also log to stderr.
 function M.init(log_level, log_stderr)
-  syslog.openlog("transformer", log_stderr and syslog.options.LOG_PERROR or 0,
-                 syslog.facilities.LOG_DAEMON)
+  posix.openlog("transformer", log_stderr and posix.LOG_PERROR or 0,
+                 posix.LOG_DAEMON)
   M:set_log_level(log_level)
 end
 
