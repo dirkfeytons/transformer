@@ -45,7 +45,7 @@ See LICENSE file for more details.
 local assert, error, type, pairs = assert, error, type, pairs
 local find, format = string.find, string.format
 
-local logger = require("transformer.logger")
+local logger = require("tch.logger")
 
 ---
 -- @module transformer.mapper.simpleuci

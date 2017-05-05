@@ -43,7 +43,7 @@ local divideInPathParam,            objectPathToTypepath,            typePathToO
 local endsWithPlaceholder,            endsWithPassThroughPlaceholder =
       pathFinder.endsWithPlaceholder, pathFinder.endsWithPassThroughPlaceholder
 
-local logger = require("transformer.logger")
+local logger = require("tch.logger")
 
 local xpcall = require ("tch.xpcall")
 local traceback = debug.traceback

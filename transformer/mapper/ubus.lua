@@ -29,7 +29,7 @@ See LICENSE file for more details.
 -- For event sending we need to use a different connection.
 -- Otherwise somebody listening for that event on the same
 -- connection will not receive it (!!).
-local logger = require("transformer.logger")
+local logger = require("tch.logger")
 local conn
 local event_conn
 do

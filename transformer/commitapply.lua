@@ -32,7 +32,7 @@ local type, setmetatable, error, pairs, ipairs =
       type, setmetatable, error, pairs, ipairs
 local find, match = string.find, string.match
 local open = io.open
-local logger = require("transformer.logger")
+local logger = require("tch.logger")
 local execute = require("lasync").execute
 
 local CommitApply = {}

@@ -31,7 +31,7 @@ local format = string.format
 local concat, sort = table.concat, table.sort
 
 local db = require("transformer.persistency.db")
-local logger = require("transformer.logger").new('DB')
+local logger = require("tch.logger").new('DB')
 local pathFinder = require("transformer.pathfinder")
 local fault = require("transformer.fault")
 

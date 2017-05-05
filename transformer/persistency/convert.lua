@@ -14,7 +14,7 @@ local require = require
 local xpcall = require 'tch.xpcall'
 local format = string.format
 local loadstring = loadstring
-local logger = require "transformer.logger"
+local logger = require "tch.logger"
 
 local function show_pcall_trace(err)
   logger:error(err)

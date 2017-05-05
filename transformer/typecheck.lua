@@ -17,7 +17,7 @@ local error, tonumber, tostring, type, pairs =
       error, tonumber, tostring, type, pairs
 local format = string.format
 
-local logger = require("transformer.logger")
+local logger = require("tch.logger")
 local fault = require 'transformer.fault'
 
 local M = {}

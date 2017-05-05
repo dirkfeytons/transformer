@@ -117,7 +117,7 @@ local M = {
   DATABASE_USER_VERSION = DATABASE_USER_VERSION
 }
 
-local logger = require("transformer.logger")
+local logger = require("tch.logger")
 local sqlite = require("lsqlite3")
 
 --- Return the full database path.

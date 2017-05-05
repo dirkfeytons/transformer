@@ -19,7 +19,7 @@ local uds = require("tch.socket.unix")
 local max_size = uds.MAX_DGRAM_SIZE
 local msg = require("transformer.msg").new()
 local tags = msg.tags
-local logger = require("transformer.logger")
+local logger = require("tch.logger")
 local bit = require("bit")
 
 local objectPathToTypepath,            divideInPathParam =

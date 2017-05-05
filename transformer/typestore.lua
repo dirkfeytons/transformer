@@ -21,7 +21,7 @@ local fault = require("transformer.fault")
 local nav = require("transformer.navigation")
 local alias_module = require("transformer.alias")
 local pathFinder = require("transformer.pathfinder")
-local logger = require("transformer.logger")
+local logger = require("tch.logger")
 local xpcall = require("tch.xpcall")
 local traceback = debug.traceback
 

@@ -33,7 +33,7 @@ local pairs, ipairs, pcall, type, error = pairs, ipairs, pcall, type, error
 local format = string.format
 
 local resolve = require("transformer.xref").resolve
-local logger = require("transformer.logger")
+local logger = require("tch.logger")
 local trlock = require("transformer.lock").Lock("transformer")
 local ubus = require("transformer.mapper.ubus").connect()
 

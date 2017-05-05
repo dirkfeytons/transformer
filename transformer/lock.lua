@@ -12,7 +12,7 @@ See LICENSE file for more details.
 
 local setmetatable, pairs, pcall, type, assert, tostring =
       setmetatable, pairs, pcall, type, assert, tostring
-local logger = require("transformer.logger")
+local logger = require("tch.logger")
 
 local Lock = {}
 Lock.__index = Lock

@@ -16,7 +16,7 @@ local require, type, error, loadfile, setfenv, getfenv, setmetatable, pcall =
 local pairs, ipairs, tostring, rawset, next =
       pairs, ipairs, tostring, rawset, next
 local lfs = require("lfs")
-local logger = require("transformer.logger")
+local logger = require("tch.logger")
 local maphelper = require 'transformer.maphelper'
 local xref = require 'transformer.xref'
 local xpcall = require ("tch.xpcall")

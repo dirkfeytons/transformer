@@ -17,7 +17,7 @@ local M = {}
 local uci = require("uci") --doc.ucidoc#doc.ucidoc
 local lfs = require("lfs")
 local crypto = require("tch.crypto")
-local logger = require("transformer.logger")
+local logger = require("tch.logger")
 
 local next, error, type, pairs, ipairs = next, error, type, pairs, ipairs
 local open = io.open

@@ -18,7 +18,8 @@ local transformer  -- our instance of Transformer
 local uloop = require("uloop")
 uloop.init()
 
-local logger = require("transformer.logger")
+local logger = require("tch.logger")
+local posix = require("tch.posix")
 local uds = require("tch.socket.unix")
 local max_size = uds.MAX_DGRAM_SIZE
 local bit = require("bit")
@@ -83,7 +84,7 @@ do
     unhide_patterns = nil,
   }
   config = do_config(config)
-  logger.init(config.log_level, config.log_stderr)
+  logger.init("transformer", config.log_level, posix.LOG_PID + (config.log_stderr and posix.LOG_PERROR or 0))
   local api = require("transformer.api")
   local errmsg
   transformer, errmsg = api.init(config)

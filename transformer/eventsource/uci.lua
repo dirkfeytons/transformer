@@ -31,7 +31,7 @@ local getmetatable, select, pairs, ipairs, type, error, pcall =
 local format = string.format
 
 local resolve = require("transformer.xref").resolve
-local logger = require("transformer.logger")
+local logger = require("tch.logger")
 
 -- Array of all registered watches, grouped per config.
 -- Since config is mandatory we can group them so we don't need
