@@ -46,13 +46,16 @@ local function iterate(location, t, full_name)
     if entry ~= "." and entry ~= ".." then
       local full_path = location .. "/" .. entry
       local mode = lfs.attributes(full_path, "mode")
+      local name = entry
+      if full_name then
+        name = full_name .. "_" .. entry
+      end
       if mode == "file" then
-        --local module = entry:gsub("%.lua$", "")
-        t[entry] = (full_name .. "_" .. entry):gsub("%.", "_")
+        t[entry] = name:gsub("%.", "_")
         extract_requires(full_path, t[entry])
       elseif mode == "directory" then
         t[entry] = {}
-        iterate(full_path, t[entry], full_name .. "_" .. entry)
+        iterate(full_path, t[entry], name)
       end
     end
   end
